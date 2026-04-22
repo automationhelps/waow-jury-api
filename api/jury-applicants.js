@@ -38,10 +38,37 @@ export default async function handler(req, res) {
     const applicants = contacts.map(contact => {
       const customFields = Array.isArray(contact.customFields) ? contact.customFields : [];
 
-      const getCustomField = (key) => {
-        const field = customFields.find(f => f.key === key);
-        return field ? field.value : "";
+      const getCustomField = (...possibleKeys) => {
+        for (const key of possibleKeys) {
+          const field = customFields.find(f => {
+            const fieldKey = String(f.key || "").trim().toLowerCase();
+            return fieldKey === String(key).trim().toLowerCase();
+          });
+          if (field && field.value) return field.value;
+        }
+        return "";
       };
+
+      const website =
+        getCustomField("website", "contact.website") ||
+        getCustomField("facebook_or_instagram_page_link", "contact.facebook_or_instagram_page_link") ||
+        "";
+
+      const medium =
+        getCustomField("mediums", "contact.mediums") ||
+        "Medium not provided";
+
+      const experience =
+        getCustomField("experience_level", "contact.experience_level") ||
+        "Experience not provided";
+
+      const statement =
+        getCustomField("artist_statement_notes", "contact.artist_statement_notes") ||
+        "No artist statement provided.";
+
+      const image = website
+        ? `https://image.thum.io/get/fullpage/${website}`
+        : "https://via.placeholder.com/1200x800?text=Applicant";
 
       return {
         id: contact.id || "",
@@ -49,11 +76,11 @@ export default async function handler(req, res) {
         lastName: contact.lastName || "",
         name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim(),
         email: contact.email || "",
-        medium: getCustomField("mediums") || "Medium not provided",
-        experience: getCustomField("experience_level") || "Experience not provided",
-        statement: getCustomField("artist_statement_notes") || "No artist statement provided.",
-        gallery: getCustomField("website") || getCustomField("facebook_or_instagram_page_link") || "#",
-        image: getCustomField("website") || "https://via.placeholder.com/1200x800?text=Applicant"
+        medium,
+        experience,
+        statement,
+        gallery: website || "#",
+        image
       };
     });
 
