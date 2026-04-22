@@ -13,8 +13,13 @@ export default async function handler(req, res) {
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
   const normalizeUrl = (url) => {
   const clean = String(url || "").trim();
+
   if (!clean) return "";
+
+  // already valid
   if (/^https?:\/\//i.test(clean)) return clean;
+
+  // fix missing protocol
   return `https://${clean}`;
 };
   const ghlHeaders = {
@@ -92,8 +97,12 @@ export default async function handler(req, res) {
         safeString(others.full_name) ||
         `${firstName} ${lastName}`.trim();
 
-      const website = safeString(others.website);
-      const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
+      const rawWebsite = safeString(others.website);
+      const rawSocial = safeString(others.r6gpxefXNTk3iCtE5iA3);
+
+      const website = normalizeUrl(rawWebsite);
+      const socialLink = normalizeUrl(rawSocial);
+
       const gallery = website || socialLink || "#";
       const experience =
         safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
