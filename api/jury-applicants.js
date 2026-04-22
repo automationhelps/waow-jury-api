@@ -1,6 +1,19 @@
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   const GHL_TOKEN = process.env.GHL_PRIVATE_TOKEN;
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
+
+  function getCustomValue(customFields, fieldId) {
+    const field = customFields.find(f => f.id === fieldId);
+    return field ? field.value : "";
+  }
 
   try {
     const response = await fetch("https://services.leadconnectorhq.com/contacts/search", {
@@ -26,7 +39,29 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    res.status(200).json(data.contacts || []);
+    const applicants = (data.contacts || []).map(contact => {
+      const customFields = contact.customFields || [];
+
+      return {
+        id: contact.id,
+        firstName: contact.firstName || "",
+        lastName: contact.lastName || "",
+        name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim(),
+        email: contact.email || "",
+
+        medium: getCustomValue(customFields, "MwjoxLsrbupQoS2lv9WN"),
+        experience: getCustomValue(customFields, "10Nlt5l6NedE6NOSPxkT"),
+        statement: getCustomValue(customFields, "drOsXj2ScM7Y9i1j14sk"),
+
+        gallery:
+          contact.website ||
+          getCustomValue(customFields, "2snUBhDdrBxJOT6cqswf"),
+
+        image: "https://via.placeholder.com/1200x800?text=Applicant"
+      };
+    });
+
+    res.status(200).json(applicants);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch applicants" });
