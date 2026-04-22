@@ -11,7 +11,12 @@ export default async function handler(req, res) {
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
-
+  const normalizeUrl = (url) => {
+  const clean = String(url || "").trim();
+  if (!clean) return "";
+  if (/^https?:\/\//i.test(clean)) return clean;
+  return `https://${clean}`;
+};
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
     Version: "2021-07-28",
@@ -90,7 +95,6 @@ export default async function handler(req, res) {
       const website = safeString(others.website);
       const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
       const gallery = website || socialLink || "#";
-
       const experience =
         safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
 
