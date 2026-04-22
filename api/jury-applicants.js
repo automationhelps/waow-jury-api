@@ -35,54 +35,119 @@ export default async function handler(req, res) {
     const data = await response.json();
     const contacts = Array.isArray(data.contacts) ? data.contacts : [];
 
-    const applicants = contacts.map(contact => {
-      const customFields = Array.isArray(contact.customFields) ? contact.customFields : [];
+    const normalize = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\{\{|\}\}/g, "")
+        .replace(/^contact\./, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
 
-      const getCustomField = (...possibleKeys) => {
-        for (const key of possibleKeys) {
-          const field = customFields.find(f => {
-            const fieldKey = String(f.key || "").trim().toLowerCase();
-            return fieldKey === String(key).trim().toLowerCase();
-          });
-          if (field && field.value) return field.value;
+    const getCustomFieldValue = (contact, possibleNames = []) => {
+      const wanted = possibleNames.map(normalize);
+
+      // case 1: customFields is an array
+      if (Array.isArray(contact.customFields)) {
+        for (const field of contact.customFields) {
+          const candidates = [
+            field.key,
+            field.name,
+            field.fieldKey,
+            field.id,
+            field.label
+          ].map(normalize);
+
+          const matched = candidates.some((candidate) => wanted.includes(candidate));
+          if (matched && field.value !== undefined && field.value !== null && String(field.value).trim() !== "") {
+            return field.value;
+          }
         }
-        return "";
-      };
+      }
 
-      const website =
-        getCustomField("website", "contact.website") ||
-        getCustomField("facebook_or_instagram_page_link", "contact.facebook_or_instagram_page_link") ||
-        "";
+      // case 2: customFields is an object map
+      if (contact.customFields && typeof contact.customFields === "object" && !Array.isArray(contact.customFields)) {
+        for (const [key, value] of Object.entries(contact.customFields)) {
+          if (wanted.includes(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== "") {
+            return value;
+          }
+        }
+      }
 
-      const medium =
-        getCustomField("mediums", "contact.mediums") ||
-        "Medium not provided";
+      // case 3: direct contact properties fallback
+      for (const name of possibleNames) {
+        const direct = contact[name];
+        if (direct !== undefined && direct !== null && String(direct).trim() !== "") {
+          return direct;
+        }
+      }
 
-      const experience =
-        getCustomField("experience_level", "contact.experience_level") ||
-        "Experience not provided";
+      return "";
+    };
 
-      const statement =
-        getCustomField("artist_statement_notes", "contact.artist_statement_notes") ||
-        "No artist statement provided.";
+    const applicants = contacts.map((contact) => {
+      const firstName = contact.firstName || "";
+      const lastName = contact.lastName || "";
+      const fullName = `${firstName} ${lastName}`.trim() || contact.name || "";
+
+      const medium = getCustomFieldValue(contact, [
+        "mediums",
+        "Mediums",
+        "contact.mediums"
+      ]);
+
+      const experience = getCustomFieldValue(contact, [
+        "experience_level",
+        "Experience Level",
+        "contact.experience_level"
+      ]);
+
+      const statement = getCustomFieldValue(contact, [
+        "artist_statement_notes",
+        "Artist Statement / Notes",
+        "contact.artist_statement_notes"
+      ]);
+
+      const website = getCustomFieldValue(contact, [
+        "website",
+        "Website",
+        "contact.website"
+      ]);
+
+      const socialLink = getCustomFieldValue(contact, [
+        "facebook_or_instagram_page_link",
+        "Facebook Or Instagram Page Link",
+        "contact.facebook_or_instagram_page_link"
+      ]);
+
+      const gallery = website || socialLink || "#";
 
       const image = website
-        ? `https://image.thum.io/get/fullpage/${website}`
-        : "https://via.placeholder.com/1200x800?text=Applicant";
+        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
+        : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
 
       return {
         id: contact.id || "",
-        firstName: contact.firstName || "",
-        lastName: contact.lastName || "",
-        name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim(),
+        firstName,
+        lastName,
+        name: fullName,
         email: contact.email || "",
-        medium,
-        experience,
-        statement,
-        gallery: website || "#",
+        medium: medium || "Medium not provided",
+        experience: experience || "Experience not provided",
+        statement: statement || "No artist statement provided.",
+        gallery,
         image
       };
     });
+
+    console.log(
+      "jury-applicants sample:",
+      JSON.stringify(
+        applicants.slice(0, 3),
+        null,
+        2
+      )
+    );
 
     return res.status(200).json(applicants);
   } catch (error) {
