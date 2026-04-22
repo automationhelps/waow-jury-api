@@ -20,13 +20,6 @@ export default async function handler(req, res) {
 
   const safeString = (value) => String(value ?? "").trim();
 
-  const normalizeUrl = (url) => {
-  const clean = safeString(url);
-  if (!clean) return "";
-  if (/^https?:\/\//i.test(clean)) return clean;
-  return `https://${clean}`;
-};
-
   try {
     const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
       method: "POST",
@@ -94,15 +87,9 @@ export default async function handler(req, res) {
         safeString(others.full_name) ||
         `${firstName} ${lastName}`.trim();
 
-      const website = normalizeUrl(others.website);
-const socialLink = normalizeUrl(others.r6gpxefXNTk3iCtE5iA3);
-const gallery = website || socialLink || "#";
-
-const imageSource = website || socialLink;
-
-const image = imageSource
-  ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${imageSource}`
-  : "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
+      const website = safeString(others.website);
+      const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
+      const gallery = website || socialLink || "#";
 
       const experience =
         safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
@@ -119,12 +106,6 @@ const image = imageSource
         safeString(others.drOsXj2ScM7Y9i1j14sk) ||
         "No artist statement provided.";
 
-      const imageSource = website || socialLink;
-
-      const image = imageSource
-        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${encodeURIComponent(imageSource)}`
-        : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
-
       submissionByEmail[email] = {
         firstName,
         lastName,
@@ -133,8 +114,7 @@ const image = imageSource
         medium,
         experience,
         statement,
-        gallery,
-        image
+        gallery
       };
     });
 
@@ -159,9 +139,7 @@ const image = imageSource
         experience: enriched?.experience || "Experience not provided",
         statement: enriched?.statement || "No artist statement provided.",
         gallery: enriched?.gallery || "#",
-        image:
-          enriched?.image ||
-          "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
+        image: "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
     });
 
