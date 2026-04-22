@@ -10,6 +10,7 @@ export default async function handler(req, res) {
   const GHL_TOKEN = process.env.GHL_PRIVATE_TOKEN;
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
   const API_BASE = "https://services.leadconnectorhq.com";
+  const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
 
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
@@ -17,75 +18,11 @@ export default async function handler(req, res) {
     "Content-Type": "application/json"
   };
 
-  const normalize = (value) =>
-    String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/\{\{|\}\}/g, "")
-      .replace(/^contact\./, "")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-
-  const firstNonEmpty = (...values) => {
-    for (const value of values) {
-      if (value !== undefined && value !== null && String(value).trim() !== "") {
-        return value;
-      }
-    }
-    return "";
-  };
-
-  const getCustomFieldValue = (contact, possibleNames = []) => {
-    const wanted = possibleNames.map(normalize);
-
-    // direct properties first
-    for (const name of possibleNames) {
-      if (contact[name] !== undefined && contact[name] !== null && String(contact[name]).trim() !== "") {
-        return contact[name];
-      }
-    }
-
-    // common custom field containers
-    const candidateCollections = [
-      contact.customFields,
-      contact.customField,
-      contact.custom_fields
-    ];
-
-    for (const collection of candidateCollections) {
-      if (Array.isArray(collection)) {
-        for (const field of collection) {
-          const candidates = [
-            field.key,
-            field.name,
-            field.fieldKey,
-            field.id,
-            field.label,
-            field.placeholder
-          ].map(normalize);
-
-          const matched = candidates.some((candidate) => wanted.includes(candidate));
-          if (matched && field.value !== undefined && field.value !== null && String(field.value).trim() !== "") {
-            return field.value;
-          }
-        }
-      }
-
-      if (collection && typeof collection === "object" && !Array.isArray(collection)) {
-        for (const [key, value] of Object.entries(collection)) {
-          if (wanted.includes(normalize(key)) && value !== undefined && value !== null && String(value).trim() !== "") {
-            return value;
-          }
-        }
-      }
-    }
-
-    return "";
-  };
+  const safeString = (value) => String(value ?? "").trim();
 
   try {
-    // 1) Search for contacts tagged ready for jury
-    const searchResponse = await fetch(`${API_BASE}/contacts/search`, {
+    // 1) Find contacts tagged ready for jury
+    const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
       method: "POST",
       headers: ghlHeaders,
       body: JSON.stringify({
@@ -102,131 +39,113 @@ export default async function handler(req, res) {
       })
     });
 
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      throw new Error(`Search Contacts failed: ${searchResponse.status} ${errorText}`);
+    if (!contactSearchResponse.ok) {
+      const errorText = await contactSearchResponse.text();
+      throw new Error(`Search Contacts failed: ${contactSearchResponse.status} ${errorText}`);
     }
 
-    const searchData = await searchResponse.json();
-    const searchContacts = Array.isArray(searchData.contacts) ? searchData.contacts : [];
+    const contactSearchData = await contactSearchResponse.json();
+    const taggedContacts = Array.isArray(contactSearchData.contacts)
+      ? contactSearchData.contacts
+      : [];
 
-    // 2) Fetch each contact's full record by ID
-    const detailedContacts = await Promise.all(
-      searchContacts.map(async (contact) => {
-        try {
-          const detailResponse = await fetch(`${API_BASE}/contacts/${contact.id}`, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${GHL_TOKEN}`,
-              Version: "2021-07-28"
-            }
-          });
-
-          if (!detailResponse.ok) {
-            // fallback to the search result if detail fetch fails
-            return contact;
-          }
-
-          const detailData = await detailResponse.json();
-
-          // Handle common response shapes
-          return (
-            detailData.contact ||
-            detailData.data?.contact ||
-            detailData.data ||
-            detailData
-          );
-        } catch (err) {
-          console.error(`Failed to fetch contact ${contact.id}:`, err);
-          return contact;
-        }
-      })
+    const taggedEmails = new Set(
+      taggedContacts
+        .map((contact) => safeString(contact.email).toLowerCase())
+        .filter(Boolean)
     );
 
-    // 3) Build applicant cards from detailed contacts
-    const applicants = detailedContacts.map((contact) => {
-      const firstName = firstNonEmpty(contact.firstName, contact.first_name);
-      const lastName = firstNonEmpty(contact.lastName, contact.last_name);
-      const fullName = firstNonEmpty(
-        contact.name,
-        `${firstName} ${lastName}`.trim()
-      );
+    // 2) Pull submissions
+    const submissionsResponse = await fetch(
+      `${API_BASE}/forms/submissions?locationId=${GHL_LOCATION_ID}&limit=100&page=1`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${GHL_TOKEN}`,
+          Version: "2021-07-28"
+        }
+      }
+    );
 
-      const medium = firstNonEmpty(
-        getCustomFieldValue(contact, [
-          "mediums",
-          "medium",
-          "contact.mediums",
-          "contact.medium",
-          "Mediums",
-          "Medium"
-        ]),
-        "Medium not provided"
-      );
+    if (!submissionsResponse.ok) {
+      const errorText = await submissionsResponse.text();
+      throw new Error(`Form submissions failed: ${submissionsResponse.status} ${errorText}`);
+    }
 
-      const experience = firstNonEmpty(
-        getCustomFieldValue(contact, [
-          "experience_level",
-          "experience",
-          "contact.experience_level",
-          "contact.experience",
-          "Experience Level",
-          "Experience"
-        ]),
-        "Experience not provided"
-      );
+    const submissionsData = await submissionsResponse.json();
+    const submissions = Array.isArray(submissionsData.submissions)
+      ? submissionsData.submissions
+      : [];
 
-      const statement = firstNonEmpty(
-        getCustomFieldValue(contact, [
-          "artist_statement_notes",
-          "artist_statement",
-          "contact.artist_statement_notes",
-          "contact.artist_statement",
-          "Artist Statement / Notes",
-          "Artist Statement"
-        ]),
-        "No artist statement provided."
-      );
+    // 3) Filter to application form submissions only
+    const applicationSubmissions = submissions.filter(
+      (sub) => sub.formId === APPLICATION_FORM_ID
+    );
 
-      const website = firstNonEmpty(
-        getCustomFieldValue(contact, [
-          "website",
-          "contact.website",
-          "Website"
-        ])
-      );
+    // 4) Build applicants from application submissions, but only for tagged contacts
+    const applicants = applicationSubmissions
+      .map((sub) => {
+        const others = sub.others || {};
 
-      const socialLink = firstNonEmpty(
-        getCustomFieldValue(contact, [
-          "facebook_or_instagram_page_link",
-          "instagram",
-          "facebook",
-          "contact.facebook_or_instagram_page_link",
-          "Facebook Or Instagram Page Link"
-        ])
-      );
+        const email = safeString(others.email).toLowerCase();
+        if (!email || !taggedEmails.has(email)) {
+          return null;
+        }
 
-      const gallery = firstNonEmpty(website, socialLink, "#");
+        const firstName = safeString(others.first_name);
+        const lastName = safeString(others.last_name);
+        const fullName =
+          safeString(sub.name) ||
+          safeString(others.full_name) ||
+          `${firstName} ${lastName}`.trim();
 
-      const image = website
-        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
-        : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
+        const website = safeString(others.website);
+        const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
+        const gallery = website || socialLink || "#";
 
-      return {
-        id: contact.id || "",
-        firstName,
-        lastName,
-        name: fullName,
-        email: firstNonEmpty(contact.email, contact.emailAddress, ""),
-        medium,
-        experience,
-        statement,
-        gallery,
-        image
-      };
-    });
+        const experience =
+          safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
 
-    return res.status(200).json(applicants);
+        let medium = "Medium not provided";
+        if (Array.isArray(others.gID7o6vKL4nC15Ted4b5) && others.gID7o6vKL4nC15Ted4b5.length) {
+          medium = others.gID7o6vKL4nC15Ted4b5.join(", ");
+        } else if (safeString(others.MwjoxLsrbupQoS2lv9WN)) {
+          medium = safeString(others.MwjoxLsrbupQoS2lv9WN);
+        }
+
+        const statement =
+          safeString(others.JPmbfbljoUVBN6Idok6Q) ||
+          safeString(others.drOsXj2ScM7Y9i1j14sk) ||
+          "No artist statement provided.";
+
+        const image = website
+          ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
+          : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
+
+        return {
+          id: sub.contactId || sub.id || email,
+          firstName,
+          lastName,
+          name: fullName,
+          email,
+          medium,
+          experience,
+          statement,
+          gallery,
+          image
+        };
+      })
+      .filter(Boolean);
+
+    // 5) Deduplicate by email
+    const dedupedApplicants = Object.values(
+      applicants.reduce((acc, applicant) => {
+        acc[applicant.email] = applicant;
+        return acc;
+      }, {})
+    );
+
+    return res.status(200).json(dedupedApplicants);
   } catch (error) {
     console.error("jury-applicants error:", error);
     return res.status(500).json({
