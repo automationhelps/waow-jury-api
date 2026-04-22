@@ -49,12 +49,6 @@ export default async function handler(req, res) {
       ? contactSearchData.contacts
       : [];
 
-    const taggedEmails = new Set(
-      taggedContacts
-        .map((contact) => safeString(contact.email).toLowerCase())
-        .filter(Boolean)
-    );
-
     // 2) Pull submissions
     const submissionsResponse = await fetch(
       `${API_BASE}/forms/submissions?locationId=${GHL_LOCATION_ID}&limit=100&page=1`,
@@ -77,75 +71,95 @@ export default async function handler(req, res) {
       ? submissionsData.submissions
       : [];
 
-    // 3) Filter to application form submissions only
     const applicationSubmissions = submissions.filter(
       (sub) => sub.formId === APPLICATION_FORM_ID
     );
 
-    // 4) Build applicants from application submissions, but only for tagged contacts
-    const applicants = applicationSubmissions
-      .map((sub) => {
-        const others = sub.others || {};
+    // Build lookup by applicant email from application submissions
+    const submissionByEmail = {};
 
-        const email = safeString(others.email).toLowerCase();
-        if (!email || !taggedEmails.has(email)) {
-          return null;
-        }
+    applicationSubmissions.forEach((sub) => {
+      const others = sub.others || {};
+      const email = safeString(others.email).toLowerCase();
+      if (!email) return;
 
-        const firstName = safeString(others.first_name);
-        const lastName = safeString(others.last_name);
-        const fullName =
-          safeString(sub.name) ||
-          safeString(others.full_name) ||
-          `${firstName} ${lastName}`.trim();
+      const firstName = safeString(others.first_name);
+      const lastName = safeString(others.last_name);
+      const fullName =
+        safeString(sub.name) ||
+        safeString(others.full_name) ||
+        `${firstName} ${lastName}`.trim();
 
-        const website = safeString(others.website);
-        const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
-        const gallery = website || socialLink || "#";
+      const website = safeString(others.website);
+      const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
+      const gallery = website || socialLink || "#";
 
-        const experience =
-          safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
+      const experience =
+        safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
 
-        let medium = "Medium not provided";
-        if (Array.isArray(others.gID7o6vKL4nC15Ted4b5) && others.gID7o6vKL4nC15Ted4b5.length) {
-          medium = others.gID7o6vKL4nC15Ted4b5.join(", ");
-        } else if (safeString(others.MwjoxLsrbupQoS2lv9WN)) {
-          medium = safeString(others.MwjoxLsrbupQoS2lv9WN);
-        }
+      let medium = "Medium not provided";
+      if (Array.isArray(others.gID7o6vKL4nC15Ted4b5) && others.gID7o6vKL4nC15Ted4b5.length) {
+        medium = others.gID7o6vKL4nC15Ted4b5.join(", ");
+      } else if (safeString(others.MwjoxLsrbupQoS2lv9WN)) {
+        medium = safeString(others.MwjoxLsrbupQoS2lv9WN);
+      }
 
-        const statement =
-          safeString(others.JPmbfbljoUVBN6Idok6Q) ||
-          safeString(others.drOsXj2ScM7Y9i1j14sk) ||
-          "No artist statement provided.";
+      const statement =
+        safeString(others.JPmbfbljoUVBN6Idok6Q) ||
+        safeString(others.drOsXj2ScM7Y9i1j14sk) ||
+        "No artist statement provided.";
 
-        const image = website
-          ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
-          : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
+      const image = website
+        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
+        : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
 
-        return {
-          id: sub.contactId || sub.id || email,
-          firstName,
-          lastName,
-          name: fullName,
-          email,
-          medium,
-          experience,
-          statement,
-          gallery,
-          image
-        };
-      })
-      .filter(Boolean);
+      submissionByEmail[email] = {
+        firstName,
+        lastName,
+        name: fullName,
+        email,
+        medium,
+        experience,
+        statement,
+        gallery,
+        image
+      };
+    });
 
-    // 5) Deduplicate by email
-    const dedupedApplicants = Object.values(
-      applicants.reduce((acc, applicant) => {
-        acc[applicant.email] = applicant;
-        return acc;
-      }, {})
-    );
+    // 3) Build applicants from tagged contacts, enriched from submissions if found
+    const applicants = taggedContacts.map((contact) => {
+      const email = safeString(contact.email).toLowerCase();
+      const enriched = submissionByEmail[email] || null;
 
-    return res.status(200).json(dedupedApplicants);
+      const firstName = enriched?.firstName || safeString(contact.firstName);
+      const lastName = enriched?.lastName || safeString(contact.lastName);
+      const fullName =
+        enriched?.name ||
+        safeString(contact.name) ||
+        `${firstName} ${lastName}`.trim();
+
+      return {
+        id: contact.id || email || fullName,
+        firstName,
+        lastName,
+        name: fullName,
+        email: email || safeString(contact.email),
+        medium: enriched?.medium || "Medium not provided",
+        experience: enriched?.experience || "Experience not provided",
+        statement: enriched?.statement || "No artist statement provided.",
+        gallery: enriched?.gallery || "#",
+        image:
+          enriched?.image ||
+          "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
+      };
+    });
+
+    console.log("Tagged contacts count:", taggedContacts.length);
+    console.log("Application submissions count:", applicationSubmissions.length);
+    console.log("Matched submission emails:", Object.keys(submissionByEmail));
+    console.log("Applicants output:", applicants);
+
+    return res.status(200).json(applicants);
   } catch (error) {
     console.error("jury-applicants error:", error);
     return res.status(500).json({
