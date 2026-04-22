@@ -21,11 +21,11 @@ export default async function handler(req, res) {
   const safeString = (value) => String(value ?? "").trim();
 
   const normalizeUrl = (url) => {
-    const clean = safeString(url);
-    if (!clean) return "";
-    if (/^https?:\/\//i.test(clean)) return clean;
-    return `https://${clean}`;
-  };
+  const clean = safeString(url);
+  if (!clean) return "";
+  if (/^https?:\/\//i.test(clean)) return clean;
+  return `https://${clean}`;
+};
 
   try {
     const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
@@ -95,8 +95,14 @@ export default async function handler(req, res) {
         `${firstName} ${lastName}`.trim();
 
       const website = normalizeUrl(others.website);
-      const socialLink = normalizeUrl(others.r6gpxefXNTk3iCtE5iA3);
-      const gallery = website || socialLink || "#";
+const socialLink = normalizeUrl(others.r6gpxefXNTk3iCtE5iA3);
+const gallery = website || socialLink || "#";
+
+const imageSource = website || socialLink;
+
+const image = imageSource
+  ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${imageSource}`
+  : "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
 
       const experience =
         safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
