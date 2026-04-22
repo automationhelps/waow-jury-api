@@ -20,8 +20,14 @@ export default async function handler(req, res) {
 
   const safeString = (value) => String(value ?? "").trim();
 
+  const normalizeUrl = (url) => {
+    const clean = safeString(url);
+    if (!clean) return "";
+    if (/^https?:\/\//i.test(clean)) return clean;
+    return `https://${clean}`;
+  };
+
   try {
-    // 1) Find contacts tagged ready for jury
     const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
       method: "POST",
       headers: ghlHeaders,
@@ -49,7 +55,6 @@ export default async function handler(req, res) {
       ? contactSearchData.contacts
       : [];
 
-    // 2) Pull submissions
     const submissionsResponse = await fetch(
       `${API_BASE}/forms/submissions?locationId=${GHL_LOCATION_ID}&limit=100&page=1`,
       {
@@ -75,7 +80,6 @@ export default async function handler(req, res) {
       (sub) => sub.formId === APPLICATION_FORM_ID
     );
 
-    // Build lookup by applicant email from application submissions
     const submissionByEmail = {};
 
     applicationSubmissions.forEach((sub) => {
@@ -90,8 +94,8 @@ export default async function handler(req, res) {
         safeString(others.full_name) ||
         `${firstName} ${lastName}`.trim();
 
-      const website = safeString(others.website);
-      const socialLink = safeString(others.r6gpxefXNTk3iCtE5iA3);
+      const website = normalizeUrl(others.website);
+      const socialLink = normalizeUrl(others.r6gpxefXNTk3iCtE5iA3);
       const gallery = website || socialLink || "#";
 
       const experience =
@@ -109,8 +113,10 @@ export default async function handler(req, res) {
         safeString(others.drOsXj2ScM7Y9i1j14sk) ||
         "No artist statement provided.";
 
-      const image = website
-        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${website}`
+      const imageSource = website || socialLink;
+
+      const image = imageSource
+        ? `https://image.thum.io/get/width/1200/crop/800/noanimate/${encodeURIComponent(imageSource)}`
         : "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview";
 
       submissionByEmail[email] = {
@@ -126,7 +132,6 @@ export default async function handler(req, res) {
       };
     });
 
-    // 3) Build applicants from tagged contacts, enriched from submissions if found
     const applicants = taggedContacts.map((contact) => {
       const email = safeString(contact.email).toLowerCase();
       const enriched = submissionByEmail[email] || null;
@@ -153,11 +158,6 @@ export default async function handler(req, res) {
           "https://via.placeholder.com/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
     });
-
-    console.log("Tagged contacts count:", taggedContacts.length);
-    console.log("Application submissions count:", applicationSubmissions.length);
-    console.log("Matched submission emails:", Object.keys(submissionByEmail));
-    console.log("Applicants output:", applicants);
 
     return res.status(200).json(applicants);
   } catch (error) {
