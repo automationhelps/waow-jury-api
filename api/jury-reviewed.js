@@ -1,4 +1,12 @@
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   const GHL_TOKEN = process.env.GHL_PRIVATE_TOKEN;
   const LOCATION_ID = process.env.GHL_LOCATION_ID;
 
@@ -48,9 +56,9 @@ export default async function handler(req, res) {
       })
       .filter(r => r.juror_name && (r.applicant_email || r.applicant_name));
 
-    res.status(200).json(reviews);
+    return res.status(200).json(reviews);
   } catch (err) {
     console.error("jury-reviewed error:", err);
-    res.status(500).json({ error: "Failed to fetch reviews" });
+    return res.status(500).json({ error: "Failed to fetch reviews" });
   }
 }
