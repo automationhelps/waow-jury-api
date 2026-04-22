@@ -40,26 +40,30 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     const applicants = (data.contacts || []).map(contact => {
-      const customFields = contact.customFields || [];
+  const customFields = contact.customFields || [];
 
-      return {
-        id: contact.id,
-        firstName: contact.firstName || "",
-        lastName: contact.lastName || "",
-        name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim(),
-        email: contact.email || "",
+  const htmlContent = getCustomValue(customFields, "q1XivxZMYIFL8MbSnwGt");
 
-        medium: getCustomValue(customFields, "MwjoxLsrbupQoS2lv9WN"),
-        experience: getCustomValue(customFields, "10Nlt5l6NedE6NOSPxkT"),
-        statement: getCustomValue(customFields, "drOsXj2ScM7Y9i1j14sk"),
+  return {
+    id: contact.id,
+    firstName: contact.firstName || "",
+    lastName: contact.lastName || "",
+    name: `${contact.firstName || ""} ${contact.lastName || ""}`.trim(),
+    email: contact.email || "",
 
-        gallery:
-          contact.website ||
-          getCustomValue(customFields, "2snUBhDdrBxJOT6cqswf"),
+    medium: getCustomValue(customFields, "MwjoxLsrbupQoS2lv9WN"),
+    experience: getCustomValue(customFields, "10Nlt5l6NedE6NOSPxkT"),
+    statement: getCustomValue(customFields, "drOsXj2ScM7Y9i1j14sk"),
 
-        image: "https://via.placeholder.com/1200x800?text=Applicant"
-      };
-    });
+    gallery:
+      contact.website ||
+      getCustomValue(customFields, "2snUBhDdrBxJOT6cqswf"),
+
+    image:
+      extractImageFromHTML(htmlContent) ||
+      "https://via.placeholder.com/1200x800?text=Applicant"
+  };
+});
 
     res.status(200).json(applicants);
   } catch (error) {
