@@ -24,33 +24,29 @@ export default async function handler(req, res) {
         const docUrl = others?.eventData?.documentURL || "";
 
         let applicantEmail = "";
+        let applicantName = "";
         let jurorName = "";
 
         if (docUrl) {
           try {
             const url = new URL(docUrl);
             applicantEmail = url.searchParams.get("applicant_email") || "";
+            applicantName = url.searchParams.get("applicant_name") || "";
             jurorName = url.searchParams.get("juror_name") || "";
-          } catch (e) {
-            // ignore malformed URL and fall back below
-          }
+          } catch (e) {}
         }
 
-        // Fallbacks from known review-form field keys
-        if (!applicantEmail) {
-          applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || "";
-        }
-
-        if (!jurorName) {
-          jurorName = others.S9MNF8KaH0qXcNmk0mca || "";
-        }
+        if (!applicantEmail) applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || "";
+        if (!applicantName) applicantName = others.nxpI696jzQq1ScBZNcBd || "";
+        if (!jurorName) jurorName = others.S9MNF8KaH0qXcNmk0mca || "";
 
         return {
           applicant_email: String(applicantEmail).trim(),
+          applicant_name: String(applicantName).trim(),
           juror_name: String(jurorName).trim()
         };
       })
-      .filter(r => r.applicant_email && r.juror_name);
+      .filter(r => r.juror_name && (r.applicant_email || r.applicant_name));
 
     res.status(200).json(reviews);
   } catch (err) {
