@@ -15,24 +15,7 @@ export default async function handler(req, res) {
     );
 
     const data = await response.json();
-
-    const submissions = data.submissions || [];
-
-    const reviews = submissions.map(sub => {
-      const fields = sub.fields || [];
-
-      const getValue = (label) => {
-        const f = fields.find(f => f.name === label);
-        return f ? f.value : "";
-      };
-
-      return {
-        applicant_email: getValue("Applicant Email"),
-        juror_name: getValue("Juror Name")
-      };
-    });
-
-    res.status(200).json(reviews);
+    res.status(200).json(data);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch reviews" });
