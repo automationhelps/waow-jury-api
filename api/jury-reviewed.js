@@ -15,27 +15,46 @@ export default async function handler(req, res) {
     );
 
     const data = await response.json();
+    const submissions = Array.isArray(data.submissions) ? data.submissions : [];
 
-    const submissions = data.submissions || [];
+    const reviews = submissions
+      .filter(sub => sub.formId === "0wAV3YF7Z0AXiZZQ8BXN")
+      .map(sub => {
+        const others = sub.others || {};
+        const docUrl = others?.eventData?.documentURL || "";
 
-    const reviews = submissions.map(sub => {
-      const fields = sub.fields || [];
+        let applicantEmail = "";
+        let jurorName = "";
 
-      const getValue = (label) => {
-        const f = fields.find(f => f.name === label);
-        return f ? f.value : "";
-      };
+        if (docUrl) {
+          try {
+            const url = new URL(docUrl);
+            applicantEmail = url.searchParams.get("applicant_email") || "";
+            jurorName = url.searchParams.get("juror_name") || "";
+          } catch (e) {
+            // ignore malformed URL and fall back below
+          }
+        }
 
-      return {
-        applicant_email: getValue("Applicant Email"),
-        juror_name: getValue("Juror Name")
-      };
-    });
+        // Fallbacks from known review-form field keys
+        if (!applicantEmail) {
+          applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || "";
+        }
+
+        if (!jurorName) {
+          jurorName = others.S9MNF8KaH0qXcNmk0mca || "";
+        }
+
+        return {
+          applicant_email: String(applicantEmail).trim(),
+          juror_name: String(jurorName).trim()
+        };
+      })
+      .filter(r => r.applicant_email && r.juror_name);
 
     res.status(200).json(reviews);
-
   } catch (err) {
-    console.error(err);
+    console.error("jury-reviewed error:", err);
     res.status(500).json({ error: "Failed to fetch reviews" });
   }
 }
