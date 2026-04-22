@@ -4,7 +4,7 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      `https://services.leadconnectorhq.com/forms/submissions?locationId=${LOCATION_ID}`,
+      `https://services.leadconnectorhq.com/forms/submissions?locationId=${LOCATION_ID}&limit=100&page=1`,
       {
         method: "GET",
         headers: {
