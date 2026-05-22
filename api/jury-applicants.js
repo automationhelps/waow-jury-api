@@ -11,17 +11,14 @@ export default async function handler(req, res) {
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
+
   const normalizeUrl = (url) => {
-  const clean = String(url || "").trim();
+    const clean = String(url || "").trim();
+    if (!clean) return "";
+    if (/^https?:\/\//i.test(clean)) return clean;
+    return `https://${clean}`;
+  };
 
-  if (!clean) return "";
-
-  // already valid
-  if (/^https?:\/\//i.test(clean)) return clean;
-
-  // fix missing protocol
-  return `https://${clean}`;
-};
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
     Version: "2021-07-28",
@@ -29,6 +26,22 @@ export default async function handler(req, res) {
   };
 
   const safeString = (value) => String(value ?? "").trim();
+
+  const pickFirst = (obj, keys, fallback = "") => {
+    for (const key of keys) {
+      const value = obj?.[key];
+
+      if (Array.isArray(value) && value.length) {
+        return value.map((v) => safeString(v)).filter(Boolean).join(", ");
+      }
+
+      if (safeString(value)) {
+        return safeString(value);
+      }
+    }
+
+    return fallback;
+  };
 
   try {
     const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
@@ -98,35 +111,89 @@ export default async function handler(req, res) {
         `${firstName} ${lastName}`.trim();
 
       const rawWebsite = safeString(others.website);
-      const rawSocial = safeString(others.r6gpxefXNTk3iCtE5iA3);
+
+      const socialLink = normalizeUrl(
+        pickFirst(
+          others,
+          [
+            "facebook_or_instagram_page_link",
+            "r6gpxefXNTk3iCtE5iA3"
+          ],
+          ""
+        )
+      );
 
       const website = normalizeUrl(rawWebsite);
-      const socialLink = normalizeUrl(rawSocial);
-
       const gallery = website || socialLink || "#";
-      const experience =
-        safeString(others.VWVo0DMHHKn1gEzy7plr) || "Experience not provided";
 
-      let medium = "Medium not provided";
-      if (Array.isArray(others.gID7o6vKL4nC15Ted4b5) && others.gID7o6vKL4nC15Ted4b5.length) {
-        medium = others.gID7o6vKL4nC15Ted4b5.join(", ");
-      } else if (safeString(others.MwjoxLsrbupQoS2lv9WN)) {
-        medium = safeString(others.MwjoxLsrbupQoS2lv9WN);
-      }
+      const experience = pickFirst(
+        others,
+        [
+          "experience_level",
+          "VWVo0DMHHKn1gEzy7plr"
+        ],
+        "Experience not provided"
+      );
 
-      const statement =
-        safeString(others.JPmbfbljoUVBN6Idok6Q) ||
-        safeString(others.drOsXj2ScM7Y9i1j14sk) ||
-        "No artist statement provided.";
+      const mediums = pickFirst(
+        others,
+        [
+          "mediums",
+          "gID7o6vKL4nC15Ted4b5",
+          "MwjoxLsrbupQoS2lv9WN"
+        ],
+        "Medium not provided"
+      );
+
+      const statement = pickFirst(
+        others,
+        [
+          "artist_statement_notes",
+          "JPmbfbljoUVBN6Idok6Q",
+          "drOsXj2ScM7Y9i1j14sk"
+        ],
+        "No artist statement provided."
+      );
+
+      const areasStrong = pickFirst(
+        others,
+        [
+          "are_there_any_areas_you_feel_particularly_strong"
+        ],
+        ""
+      );
+
+      const connections = pickFirst(
+        others,
+        [
+          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why"
+        ],
+        ""
+      );
+
+      const growthAreas = pickFirst(
+        others,
+        [
+          "in_what_areas_of_your_art_business_or_artwork_do_you_struggle"
+        ],
+        ""
+      );
 
       submissionByEmail[email] = {
         firstName,
         lastName,
         name: fullName,
         email,
-        medium,
+        medium: mediums,
+        mediums,
         experience,
+        experience_level: experience,
         statement,
+        artist_statement_notes: statement,
+        areas_particularly_strong: areasStrong,
+        connections_felt: connections,
+        areas_to_improve: growthAreas,
+        facebook_or_instagram_page_link: socialLink,
         gallery
       };
     });
@@ -149,8 +216,22 @@ export default async function handler(req, res) {
         name: fullName,
         email: email || safeString(contact.email),
         medium: enriched?.medium || "Medium not provided",
+        mediums: enriched?.mediums || enriched?.medium || "Medium not provided",
         experience: enriched?.experience || "Experience not provided",
+        experience_level:
+          enriched?.experience_level ||
+          enriched?.experience ||
+          "Experience not provided",
         statement: enriched?.statement || "No artist statement provided.",
+        artist_statement_notes:
+          enriched?.artist_statement_notes ||
+          enriched?.statement ||
+          "No artist statement provided.",
+        areas_particularly_strong: enriched?.areas_particularly_strong || "",
+        connections_felt: enriched?.connections_felt || "",
+        areas_to_improve: enriched?.areas_to_improve || "",
+        facebook_or_instagram_page_link:
+          enriched?.facebook_or_instagram_page_link || "",
         gallery: enriched?.gallery || "#",
         image: "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
