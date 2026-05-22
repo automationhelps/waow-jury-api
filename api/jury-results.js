@@ -1,6 +1,9 @@
-// api/jury-results.js
-module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
+export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -8,186 +11,354 @@ module.exports = async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const GHL_TOKEN = process.env.GHL_PRIVATE_TOKEN;
-  const LOCATION_ID = process.env.GHL_LOCATION_ID;
-  const JURY_FORM_ID = "0wAV3YF7Z0AXiZZQ8BXN";
+  try {
+    const apiKey = process.env.GHL_API_KEY;
+    const locationId = process.env.GHL_LOCATION_ID;
+    const formId = process.env.GHL_JURY_FORM_ID;
 
-  const safeString = (value) => String(value ?? "").trim();
-  const normalize = (value) => safeString(value).toLowerCase();
+    if (!apiKey || !locationId || !formId) {
+      return res.status(500).json({
+        error: "Missing required environment variables: GHL_API_KEY, GHL_LOCATION_ID, GHL_JURY_FORM_ID"
+      });
+    }
 
-  async function fetchAllSubmissions() {
-    const all = [];
-    let page = 1;
-    let keepGoing = true;
+    const submissions = await fetchAllFormSubmissions({
+      apiKey,
+      locationId,
+      formId
+    });
 
-    while (keepGoing) {
-      const response = await fetch(
-        `https://services.leadconnectorhq.com/forms/submissions?locationId=${LOCATION_ID}&limit=100&page=${page}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${GHL_TOKEN}`,
-            Version: "2021-07-28"
-          }
-        }
-      );
+    const flattenedReviews = submissions
+      .map(transformSubmissionToReview)
+      .filter(Boolean);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Forms submissions fetch failed: ${response.status} ${errorText}`);
+    const groupedApplicants = new Map();
+
+    for (const review of flattenedReviews) {
+      const applicantEmail = normalize(review.applicant_email);
+      const jurorEmail = normalize(review.juror_email);
+      const score = toNumber(review.score);
+
+      if (!applicantEmail || !jurorEmail || score === null) continue;
+
+      if (!groupedApplicants.has(applicantEmail)) {
+        groupedApplicants.set(applicantEmail, {
+          applicant_email: applicantEmail,
+          applicant_name: cleanString(review.applicant_name),
+          juror_scores_map: new Map()
+        });
       }
 
-      const data = await response.json();
-      const batch = Array.isArray(data.submissions) ? data.submissions : [];
-      all.push(...batch);
+      const applicant = groupedApplicants.get(applicantEmail);
+      const dedupeKey = `${applicantEmail}::${jurorEmail}`;
 
-      if (batch.length < 100) {
-        keepGoing = false;
+      const incomingRecord = {
+        juror_name: cleanString(review.juror_name),
+        juror_email: jurorEmail,
+        score,
+        submitted_at: review.submitted_at || null
+      };
+
+      const existing = applicant.juror_scores_map.get(dedupeKey);
+
+      if (!existing) {
+        applicant.juror_scores_map.set(dedupeKey, incomingRecord);
       } else {
-        page += 1;
+        const existingTime = parseDateValue(existing.submitted_at);
+        const incomingTime = parseDateValue(incomingRecord.submitted_at);
+
+        if (incomingTime >= existingTime) {
+          applicant.juror_scores_map.set(dedupeKey, incomingRecord);
+        }
+      }
+
+      if (!applicant.applicant_name && review.applicant_name) {
+        applicant.applicant_name = cleanString(review.applicant_name);
       }
     }
 
-    return all;
-  }
+    const results = Array.from(groupedApplicants.values())
+      .map((applicant) => {
+        const jurorScores = Array.from(applicant.juror_scores_map.values()).sort(
+          (a, b) => parseDateValue(b.submitted_at) - parseDateValue(a.submitted_at)
+        );
 
-  try {
-    const submissions = await fetchAllSubmissions();
-
-    const rawReviews = submissions
-      .filter((sub) => sub.formId === JURY_FORM_ID)
-      .map((sub) => {
-        const others = sub.others || {};
-        const contact = sub.contact || {};
-        const docUrl = others?.eventData?.documentURL || "";
-
-        let applicantEmail = "";
-        let applicantName = "";
-        let jurorName = "";
-        let jurorEmail = "";
-
-        if (docUrl) {
-          try {
-            const url = new URL(docUrl);
-            applicantEmail = url.searchParams.get("applicant_email") || "";
-            applicantName = url.searchParams.get("applicant_name") || "";
-            jurorName = url.searchParams.get("juror_name") || "";
-            jurorEmail = url.searchParams.get("juror_email") || "";
-          } catch (e) {}
-        }
-
-        if (!applicantEmail) {
-          applicantEmail =
-            others.pfq5RHMP8a30AYA2TZX5 ||
-            others.applicant_email ||
-            "";
-        }
-
-        if (!applicantName) {
-          applicantName =
-            others.nxpI696jzQq1ScBZNcBd ||
-            others.applicant_name ||
-            "";
-        }
-
-        if (!jurorName) {
-          jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
-        }
-
-        if (!jurorEmail) {
-          jurorEmail = others.juror_email || "";
-        }
-
-        const scoreRaw =
-          contact._overall_jury_score ||
-          others._overall_jury_score ||
-          others.overall_jury_score ||
-          "";
-
-        const score = Number(scoreRaw);
-        const validScore = Number.isFinite(score) && score > 0 ? score : null;
+        const totalScore = jurorScores.reduce((sum, item) => sum + item.score, 0);
+        const reviewCount = jurorScores.length;
+        const averageScore = reviewCount ? totalScore / reviewCount : 0;
 
         return {
-          applicant_email: safeString(applicantEmail),
-          applicant_name: safeString(applicantName),
-          juror_email: safeString(jurorEmail),
-          juror_name: safeString(jurorName),
-          score: validScore,
-          submitted_at: sub.dateAdded || sub.createdAt || sub.updatedAt || null,
-          submission_id: sub.id || sub._id || ""
+          applicant_email: applicant.applicant_email,
+          applicant_name: applicant.applicant_name || applicant.applicant_email,
+          review_count: reviewCount,
+          total_score: totalScore,
+          average_score: Number(averageScore.toFixed(2)),
+          juror_scores: jurorScores
         };
       })
-      .filter((review) =>
-        review.applicant_email &&
-        review.juror_email &&
-        review.score !== null
-      );
-
-    const perPairLatest = new Map();
-
-    rawReviews.forEach((review) => {
-      const key = `${normalize(review.juror_email)}::${normalize(review.applicant_email)}`;
-      const existing = perPairLatest.get(key);
-
-      if (!existing) {
-        perPairLatest.set(key, review);
-        return;
-      }
-
-      const existingTime = existing.submitted_at ? new Date(existing.submitted_at).getTime() : 0;
-      const reviewTime = review.submitted_at ? new Date(review.submitted_at).getTime() : 0;
-
-      if (reviewTime >= existingTime) {
-        perPairLatest.set(key, review);
-      }
-    });
-
-    const dedupedReviews = Array.from(perPairLatest.values());
-    const resultsByApplicant = {};
-
-    dedupedReviews.forEach((review) => {
-      const key = normalize(review.applicant_email);
-
-      if (!resultsByApplicant[key]) {
-        resultsByApplicant[key] = {
-          applicant_email: review.applicant_email,
-          applicant_name: review.applicant_name,
-          review_count: 0,
-          total_score: 0,
-          average_score: 0,
-          juror_scores: []
-        };
-      }
-
-      resultsByApplicant[key].review_count += 1;
-      resultsByApplicant[key].total_score += review.score;
-      resultsByApplicant[key].juror_scores.push({
-        juror_email: review.juror_email,
-        juror_name: review.juror_name,
-        score: review.score,
-        submitted_at: review.submitted_at,
-        submission_id: review.submission_id
-      });
-    });
-
-    const resultArray = Object.values(resultsByApplicant)
-      .map((item) => ({
-        ...item,
-        average_score: item.review_count
-          ? Math.round((item.total_score / item.review_count) * 100) / 100
-          : 0
-      }))
       .sort((a, b) => {
-        if (b.average_score !== a.average_score) return b.average_score - a.average_score;
-        return b.total_score - a.total_score;
+        if (b.average_score !== a.average_score) {
+          return b.average_score - a.average_score;
+        }
+        if (b.total_score !== a.total_score) {
+          return b.total_score - a.total_score;
+        }
+        return a.applicant_name.localeCompare(b.applicant_name);
       });
 
-    return res.status(200).json(resultArray);
-  } catch (err) {
-    console.error("jury-results error:", err);
+    return res.status(200).json(results);
+  } catch (error) {
+    console.error("jury-results error:", error);
     return res.status(500).json({
-      error: "Failed to aggregate jury results",
-      detail: err.message
+      error: "Failed to build jury results",
+      details: error.message || "Unknown error"
     });
   }
-};
+}
+
+async function fetchAllFormSubmissions({ apiKey, locationId, formId }) {
+  const all = [];
+  let page = 1;
+  const limit = 100;
+  let keepGoing = true;
+
+  while (keepGoing) {
+    const url = new URL("https://services.leadconnectorhq.com/forms/submissions");
+    url.searchParams.set("locationId", locationId);
+    url.searchParams.set("formId", formId);
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("page", String(page));
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Version: "2021-07-28",
+        Accept: "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HighLevel API failed on page ${page}: ${response.status} ${text}`);
+    }
+
+    const json = await response.json();
+
+    const items =
+      json.submissions ||
+      json.data ||
+      json.results ||
+      json.items ||
+      [];
+
+    if (!Array.isArray(items)) {
+      throw new Error("Unexpected HighLevel response shape: submissions array not found");
+    }
+
+    all.push(...items);
+
+    if (items.length < limit) {
+      keepGoing = false;
+    } else {
+      page += 1;
+    }
+  }
+
+  return all;
+}
+
+function transformSubmissionToReview(submission) {
+  const fieldMap = extractFieldMap(submission);
+
+  const applicantEmail =
+    firstValue(
+      fieldMap,
+      [
+        "applicant_email",
+        "applicant email",
+        "email",
+        "artist_email",
+        "artist email"
+      ]
+    );
+
+  const applicantName =
+    firstValue(
+      fieldMap,
+      [
+        "applicant_name",
+        "applicant name",
+        "artist_name",
+        "artist name",
+        "name"
+      ]
+    ) || buildNameFromParts(fieldMap, "applicant");
+
+  const jurorEmail =
+    firstValue(
+      fieldMap,
+      [
+        "juror_email",
+        "juror email",
+        "reviewer_email",
+        "reviewer email"
+      ]
+    );
+
+  const jurorName =
+    firstValue(
+      fieldMap,
+      [
+        "juror_name",
+        "juror name",
+        "reviewer_name",
+        "reviewer name"
+      ]
+    ) || buildNameFromParts(fieldMap, "juror");
+
+  const score =
+    firstValue(
+      fieldMap,
+      [
+        "score",
+        "jury_score",
+        "jury score",
+        "rating",
+        "total_score",
+        "total score"
+      ]
+    );
+
+  const submittedAt =
+    submission.submittedAt ||
+    submission.createdAt ||
+    submission.dateAdded ||
+    submission.updatedAt ||
+    null;
+
+  return {
+    applicant_email: applicantEmail,
+    applicant_name: applicantName,
+    juror_email: jurorEmail,
+    juror_name: jurorName,
+    score,
+    submitted_at: submittedAt
+  };
+}
+
+function extractFieldMap(submission) {
+  const map = {};
+
+  const possibleCollections = [
+    submission?.fields,
+    submission?.customFields,
+    submission?.responses,
+    submission?.formData
+  ];
+
+  for (const collection of possibleCollections) {
+    if (Array.isArray(collection)) {
+      for (const item of collection) {
+        const key = normalizeFieldKey(
+          item?.fieldKey ||
+          item?.key ||
+          item?.name ||
+          item?.label
+        );
+
+        const value =
+          item?.fieldValue ??
+          item?.value ??
+          item?.answer ??
+          item?.text ??
+          "";
+
+        if (key && value !== undefined && value !== null && String(value).trim() !== "") {
+          map[key] = String(value).trim();
+        }
+      }
+    } else if (collection && typeof collection === "object") {
+      for (const [rawKey, rawValue] of Object.entries(collection)) {
+        const key = normalizeFieldKey(rawKey);
+        if (key && rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "") {
+          map[key] = String(rawValue).trim();
+        }
+      }
+    }
+  }
+
+  if (submission?.contact && typeof submission.contact === "object") {
+    const contact = submission.contact;
+
+    if (contact.email && !map["email"]) {
+      map["email"] = String(contact.email).trim();
+    }
+
+    const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+    if (fullName && !map["name"]) {
+      map["name"] = fullName;
+    }
+  }
+
+  return map;
+}
+
+function firstValue(fieldMap, keys) {
+  for (const key of keys) {
+    const normalizedKey = normalizeFieldKey(key);
+    if (fieldMap[normalizedKey]) {
+      return fieldMap[normalizedKey];
+    }
+  }
+  return "";
+}
+
+function buildNameFromParts(fieldMap, type) {
+  const first =
+    firstValue(fieldMap, [
+      `${type}_first_name`,
+      `${type} first name`,
+      `${type}_firstname`,
+      `${type} firstname`
+    ]) || "";
+
+  const last =
+    firstValue(fieldMap, [
+      `${type}_last_name`,
+      `${type} last name`,
+      `${type}_lastname`,
+      `${type} lastname`
+    ]) || "";
+
+  return [first, last].filter(Boolean).join(" ").trim();
+}
+
+function normalizeFieldKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalize(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function cleanString(value) {
+  return String(value || "").trim();
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).replace(/[^0-9.\-]/g, "").trim();
+  if (!cleaned) return null;
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseDateValue(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
