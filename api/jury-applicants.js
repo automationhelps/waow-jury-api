@@ -11,6 +11,7 @@ export default async function handler(req, res) {
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
+  const DEBUG_MODE = true;
 
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
@@ -55,14 +56,16 @@ export default async function handler(req, res) {
     return safeString(value);
   };
 
+  const getContactFieldArray = (contact) => {
+    if (Array.isArray(contact.customFields)) return contact.customFields;
+    if (Array.isArray(contact.customFieldsData)) return contact.customFieldsData;
+    if (Array.isArray(contact.custom_fields)) return contact.custom_fields;
+    if (Array.isArray(contact.customField)) return contact.customField;
+    return [];
+  };
+
   const findCustomFieldValue = (contact, possibleKeys = []) => {
-    const fields = Array.isArray(contact.customFields)
-      ? contact.customFields
-      : Array.isArray(contact.customFieldsData)
-      ? contact.customFieldsData
-      : Array.isArray(contact.custom_fields)
-      ? contact.custom_fields
-      : [];
+    const fields = getContactFieldArray(contact);
 
     for (const field of fields) {
       const id = safeString(field.id);
@@ -156,14 +159,7 @@ export default async function handler(req, res) {
       const rawWebsite = safeString(others.website);
 
       const socialLink = normalizeUrl(
-        pickFirst(
-          others,
-          [
-            "facebook_or_instagram_page_link",
-            "r6gpxefXNTk3iCtE5iA3"
-          ],
-          ""
-        )
+        pickFirst(others, ["facebook_or_instagram_page_link", "r6gpxefXNTk3iCtE5iA3"], "")
       );
 
       const website = normalizeUrl(rawWebsite);
@@ -171,30 +167,19 @@ export default async function handler(req, res) {
 
       const experience = pickFirst(
         others,
-        [
-          "experience_level",
-          "VWVo0DMHHKn1gEzy7plr"
-        ],
+        ["experience_level", "VWVo0DMHHKn1gEzy7plr"],
         "Experience not provided"
       );
 
       const mediums = pickFirst(
         others,
-        [
-          "mediums",
-          "gID7o6vKL4nC15Ted4b5",
-          "MwjoxLsrbupQoS2lv9WN"
-        ],
+        ["mediums", "gID7o6vKL4nC15Ted4b5", "MwjoxLsrbupQoS2lv9WN"],
         "Medium not provided"
       );
 
       const statement = pickFirst(
         others,
-        [
-          "artist_statement_notes",
-          "JPmbfbljoUVBN6Idok6Q",
-          "drOsXj2ScM7Y9i1j14sk"
-        ],
+        ["artist_statement_notes", "JPmbfbljoUVBN6Idok6Q", "drOsXj2ScM7Y9i1j14sk"],
         "No artist statement provided."
       );
 
@@ -228,9 +213,7 @@ export default async function handler(req, res) {
             }
           });
 
-          if (!detailResponse.ok) {
-            return contact;
-          }
+          if (!detailResponse.ok) return contact;
 
           const detailData = await detailResponse.json();
           return detailData.contact || detailData || contact;
@@ -293,27 +276,20 @@ export default async function handler(req, res) {
         ])
       );
 
-      const finalMediums =
-        enriched?.mediums ||
-        contactMediums ||
-        "Medium not provided";
+      const finalMediums = enriched?.mediums || contactMediums || "Medium not provided";
+      const finalExperience = enriched?.experience_level || contactExperience || "Experience not provided";
+      const finalStatement = enriched?.artist_statement_notes || contactStatement || "No artist statement provided.";
+      const finalSocial = enriched?.facebook_or_instagram_page_link || contactSocial || "";
 
-      const finalExperience =
-        enriched?.experience_level ||
-        contactExperience ||
-        "Experience not provided";
+      const debugFields = getContactFieldArray(contact).map((field) => ({
+        id: safeString(field.id),
+        key: safeString(field.key),
+        fieldKey: safeString(field.fieldKey),
+        name: safeString(field.name),
+        value: flattenCustomFieldValue(field.value || field.fieldValue || "")
+      }));
 
-      const finalStatement =
-        enriched?.artist_statement_notes ||
-        contactStatement ||
-        "No artist statement provided.";
-
-      const finalSocial =
-        enriched?.facebook_or_instagram_page_link ||
-        contactSocial ||
-        "";
-
-      return {
+      const result = {
         id: contact.id || email || fullName,
         firstName,
         lastName,
@@ -332,6 +308,15 @@ export default async function handler(req, res) {
         gallery: enriched?.gallery || finalSocial || "#",
         image: "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
+
+      if (DEBUG_MODE) {
+        result.debug_version = "jury-api-debug-2026-05-22-855pm";
+        result.debug_contact_id = safeString(contact.id || contact._id);
+        result.debug_contact_name = fullName;
+        result.debug_custom_fields = debugFields;
+      }
+
+      return result;
     });
 
     return res.status(200).json(applicants);
@@ -343,3 +328,4 @@ export default async function handler(req, res) {
     });
   }
 }
+</query>
