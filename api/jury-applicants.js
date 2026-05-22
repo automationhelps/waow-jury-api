@@ -12,19 +12,19 @@ export default async function handler(req, res) {
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
 
-  const normalizeUrl = (url) => {
-    const clean = String(url || "").trim();
-    if (!clean) return "";
-    if (/^https?:\/\//i.test(clean)) return clean;
-    return `https://${clean}`;
-  };
-
-  const safeString = (value) => String(value ?? "").trim();
-
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
     Version: "2021-07-28",
     "Content-Type": "application/json"
+  };
+
+  const safeString = (value) => String(value ?? "").trim();
+
+  const normalizeUrl = (url) => {
+    const clean = safeString(url);
+    if (!clean) return "";
+    if (/^https?:\/\//i.test(clean)) return clean;
+    return `https://${clean}`;
   };
 
   const pickFirst = (obj, keys, fallback = "") => {
@@ -40,6 +40,50 @@ export default async function handler(req, res) {
       }
     }
     return fallback;
+  };
+
+  const flattenCustomFieldValue = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((v) => safeString(v)).filter(Boolean).join(", ");
+    }
+    if (value && typeof value === "object") {
+      if (Array.isArray(value.value)) {
+        return value.value.map((v) => safeString(v)).filter(Boolean).join(", ");
+      }
+      if ("value" in value) return safeString(value.value);
+    }
+    return safeString(value);
+  };
+
+  const findCustomFieldValue = (contact, possibleKeys = []) => {
+    const fields = Array.isArray(contact.customFields)
+      ? contact.customFields
+      : Array.isArray(contact.customFieldsData)
+      ? contact.customFieldsData
+      : Array.isArray(contact.custom_fields)
+      ? contact.custom_fields
+      : [];
+
+    for (const field of fields) {
+      const id = safeString(field.id);
+      const key = safeString(field.key);
+      const fieldKey = safeString(field.fieldKey);
+      const name = safeString(field.name);
+
+      const matched = possibleKeys.some((candidate) => {
+        const c = safeString(candidate);
+        return c && (c === id || c === key || c === fieldKey || c === name);
+      });
+
+      if (matched) {
+        const value =
+          flattenCustomFieldValue(field.value) ||
+          flattenCustomFieldValue(field.fieldValue);
+        if (value) return value;
+      }
+    }
+
+    return "";
   };
 
   try {
@@ -99,12 +143,6 @@ export default async function handler(req, res) {
 
     applicationSubmissions.forEach((sub) => {
       const others = sub.others || {};
-      console.log("==== FORM SUBMISSION DEBUG START ====");
-console.log("Submission email:", others.email);
-console.log("Available keys:", Object.keys(others));
-console.log("Full others payload:", JSON.stringify(others, null, 2));
-console.log("==== FORM SUBMISSION DEBUG END ====");
-      console.log("SUBMISSION OTHERS:", JSON.stringify(others, null, 2));
       const email = safeString(others.email).toLowerCase();
       if (!email) return;
 
@@ -160,36 +198,6 @@ console.log("==== FORM SUBMISSION DEBUG END ====");
         "No artist statement provided."
       );
 
-      const areasStrong = pickFirst(
-        others,
-        [
-          "are_there_any_areas_you_feel_particularly_strong",
-          "are_there_any_areas_you_feel_particularly_strong_in",
-          "are_there_any_areas_you_feel_particularly_s..."
-        ],
-        ""
-      );
-
-      const connections = pickFirst(
-        others,
-        [
-          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why",
-          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow",
-          "do_you_have_any_connections_that_you_fe..."
-        ],
-        ""
-      );
-
-      const growthAreas = pickFirst(
-        others,
-        [
-          "in_what_areas_of_your_art_business_or_artwork_do_you_struggle",
-          "in_what_areas_of_your_art_business_or_artwork",
-          "in_what_areas_of_your_art_business_or_artw..."
-        ],
-        ""
-      );
-
       submissionByEmail[email] = {
         firstName,
         lastName,
@@ -201,15 +209,38 @@ console.log("==== FORM SUBMISSION DEBUG END ====");
         experience_level: experience,
         statement,
         artist_statement_notes: statement,
-        areas_particularly_strong: areasStrong,
-        connections_felt: connections,
-        areas_to_improve: growthAreas,
         facebook_or_instagram_page_link: socialLink,
         gallery
       };
     });
 
-    const applicants = taggedContacts.map((contact) => {
+    const detailedContacts = await Promise.all(
+      taggedContacts.map(async (contact) => {
+        const contactId = contact.id || contact._id;
+        if (!contactId) return contact;
+
+        try {
+          const detailResponse = await fetch(`${API_BASE}/contacts/${contactId}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${GHL_TOKEN}`,
+              Version: "2021-07-28"
+            }
+          });
+
+          if (!detailResponse.ok) {
+            return contact;
+          }
+
+          const detailData = await detailResponse.json();
+          return detailData.contact || detailData || contact;
+        } catch (err) {
+          return contact;
+        }
+      })
+    );
+
+    const applicants = detailedContacts.map((contact) => {
       const email = safeString(contact.email).toLowerCase();
       const enriched = submissionByEmail[email] || null;
 
@@ -220,30 +251,85 @@ console.log("==== FORM SUBMISSION DEBUG END ====");
         safeString(contact.name) ||
         `${firstName} ${lastName}`.trim();
 
+      const contactAreasStrong = findCustomFieldValue(contact, [
+        "contact.are_there_any_areas_you_feel_particularly_strong",
+        "are_there_any_areas_you_feel_particularly_strong"
+      ]);
+
+      const contactConnections = findCustomFieldValue(contact, [
+        "contact.do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why",
+        "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why"
+      ]);
+
+      const contactGrowthAreas = findCustomFieldValue(contact, [
+        "contact.in_what_areas_of_your_art_business_or_artwork_do_you_struggle",
+        "in_what_areas_of_your_art_business_or_artwork_do_you_struggle"
+      ]);
+
+      const contactStatement = findCustomFieldValue(contact, [
+        "contact.artist_statement_notes",
+        "artist_statement_notes",
+        "JPmbfbljoUVBN6Idok6Q"
+      ]);
+
+      const contactExperience = findCustomFieldValue(contact, [
+        "contact.experience_level",
+        "experience_level",
+        "VWVo0DMHHKn1gEzy7plr"
+      ]);
+
+      const contactMediums = findCustomFieldValue(contact, [
+        "contact.mediums",
+        "mediums",
+        "gID7o6vKL4nC15Ted4b5",
+        "MwjoxLsrbupQoS2lv9WN"
+      ]);
+
+      const contactSocial = normalizeUrl(
+        findCustomFieldValue(contact, [
+          "contact.facebook_or_instagram_page_link",
+          "facebook_or_instagram_page_link",
+          "r6gpxefXNTk3iCtE5iA3"
+        ])
+      );
+
+      const finalMediums =
+        enriched?.mediums ||
+        contactMediums ||
+        "Medium not provided";
+
+      const finalExperience =
+        enriched?.experience_level ||
+        contactExperience ||
+        "Experience not provided";
+
+      const finalStatement =
+        enriched?.artist_statement_notes ||
+        contactStatement ||
+        "No artist statement provided.";
+
+      const finalSocial =
+        enriched?.facebook_or_instagram_page_link ||
+        contactSocial ||
+        "";
+
       return {
         id: contact.id || email || fullName,
         firstName,
         lastName,
         name: fullName,
         email: email || safeString(contact.email),
-        medium: enriched?.medium || "Medium not provided",
-        mediums: enriched?.mediums || enriched?.medium || "Medium not provided",
-        experience: enriched?.experience || "Experience not provided",
-        experience_level:
-          enriched?.experience_level ||
-          enriched?.experience ||
-          "Experience not provided",
-        statement: enriched?.statement || "No artist statement provided.",
-        artist_statement_notes:
-          enriched?.artist_statement_notes ||
-          enriched?.statement ||
-          "No artist statement provided.",
-        areas_particularly_strong: enriched?.areas_particularly_strong || "",
-        connections_felt: enriched?.connections_felt || "",
-        areas_to_improve: enriched?.areas_to_improve || "",
-        facebook_or_instagram_page_link:
-          enriched?.facebook_or_instagram_page_link || "",
-        gallery: enriched?.gallery || "#",
+        medium: finalMediums,
+        mediums: finalMediums,
+        experience: finalExperience,
+        experience_level: finalExperience,
+        statement: finalStatement,
+        artist_statement_notes: finalStatement,
+        areas_particularly_strong: contactAreasStrong || "",
+        connections_felt: contactConnections || "",
+        areas_to_improve: contactGrowthAreas || "",
+        facebook_or_instagram_page_link: finalSocial,
+        gallery: enriched?.gallery || finalSocial || "#",
         image: "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
     });
