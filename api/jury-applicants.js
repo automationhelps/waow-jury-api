@@ -99,6 +99,11 @@ export default async function handler(req, res) {
 
     applicationSubmissions.forEach((sub) => {
       const others = sub.others || {};
+      console.log("==== FORM SUBMISSION DEBUG START ====");
+console.log("Submission email:", others.email);
+console.log("Available keys:", Object.keys(others));
+console.log("Full others payload:", JSON.stringify(others, null, 2));
+console.log("==== FORM SUBMISSION DEBUG END ====");
       console.log("SUBMISSION OTHERS:", JSON.stringify(others, null, 2));
       const email = safeString(others.email).toLowerCase();
       if (!email) return;
