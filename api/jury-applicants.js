@@ -1,5 +1,6 @@
 module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
+  // While debugging, allow all; later you can lock this back to https://waowconnect.org
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -12,6 +13,13 @@ module.exports = async function handler(req, res) {
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
   const DEBUG_MODE = false;
+
+  if (!GHL_TOKEN || !GHL_LOCATION_ID) {
+    return res.status(500).json({
+      error: "Missing required environment variables",
+      detail: "GHL_PRIVATE_TOKEN or GHL_LOCATION_ID is not set"
+    });
+  }
 
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
@@ -90,6 +98,7 @@ module.exports = async function handler(req, res) {
   };
 
   try {
+    // 1) Contacts tagged "ready for jury"
     const contactSearchResponse = await fetch(`${API_BASE}/contacts/search`, {
       method: "POST",
       headers: ghlHeaders,
@@ -117,6 +126,7 @@ module.exports = async function handler(req, res) {
       ? contactSearchData.contacts
       : [];
 
+    // 2) All form submissions, then filter to application form
     const submissionsResponse = await fetch(
       `${API_BASE}/forms/submissions?locationId=${GHL_LOCATION_ID}&limit=100&page=1`,
       {
@@ -201,6 +211,7 @@ module.exports = async function handler(req, res) {
       };
     });
 
+    // 3) Enrich tagged contacts with submission data
     const detailedContacts = await Promise.all(
       taggedContacts.map(async (contact) => {
         const contactId = contact.id || contact._id;
