@@ -1,24 +1,22 @@
 // api/jury-unlocks.js
 
-let kv = null;
-let memoryUnlocks = new Map();
+let kvClient = null;
+const memoryUnlocks = new Map();
 
 async function getKV() {
-  if (kv) return kv;
+  if (kvClient) return kvClient;
 
   try {
     const mod = await import("@vercel/kv");
-    kv = mod.kv;
-    return kv;
+    kvClient = mod.kv;
+    return kvClient;
   } catch (error) {
     return null;
   }
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -26,8 +24,8 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const items = await listUnlocks();
-      return res.status(200).json(items);
+      const unlocks = await listUnlocks();
+      return res.status(200).json(unlocks);
     }
 
     if (req.method === "POST") {
@@ -35,7 +33,7 @@ module.exports = async function handler(req, res) {
 
       const jurorEmail = normalize(body.juror_email);
       const applicantEmail = normalize(body.applicant_email);
-      const requestedBy = clean(body.requested_by || body.admin_name || "admin");
+      const requestedBy = clean(body.requested_by || "jury-room");
       const reason = clean(body.reason || "Manual unlock");
 
       if (!jurorEmail || !applicantEmail) {
@@ -52,7 +50,7 @@ module.exports = async function handler(req, res) {
         juror_email: jurorEmail,
         applicant_email: applicantEmail,
         requested_by: requestedBy,
-        reason,
+        reason: reason,
         unlocked_at: new Date().toISOString(),
         active: true
       };
@@ -71,9 +69,8 @@ module.exports = async function handler(req, res) {
 
       const jurorEmail = normalize(body.juror_email);
       const applicantEmail = normalize(body.applicant_email);
-      const lockKey =
-        normalize(body.lock_key) ||
-        makeLockKey(jurorEmail, applicantEmail);
+      const suppliedLockKey = normalize(body.lock_key);
+      const lockKey = suppliedLockKey || makeLockKey(jurorEmail, applicantEmail);
 
       if (!lockKey) {
         return res.status(400).json({
@@ -90,50 +87,71 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
   } catch (error) {
     console.error("jury-unlocks error:", error);
     return res.status(500).json({
       error: "Failed to process jury unlocks",
-      detail: error.message || "Unknown error"
+      detail: error && error.message ? error.message : "Unknown error"
     });
   }
 };
 
+function setCorsHeaders(req, res) {
+  const allowedOrigin = req.headers.origin || "*";
+
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+}
+
 async function listUnlocks() {
-  const store = await getKV();
+  const kv = await getKV();
 
-  if (store) {
-    const index = (await store.get("jury_unlock_keys")) || [];
-    if (!Array.isArray(index) || index.length === 0) return [];
+  if (kv) {
+    const index = (await kv.get("jury_unlock_keys")) || [];
+    if (!Array.isArray(index) || !index.length) return [];
 
-    const results = [];
-    for (const key of index) {
-      const item = await store.get(`jury_unlock:${key}`);
+    const items = [];
+    for (const lockKey of index) {
+      const item = await kv.get(`jury_unlock:${lockKey}`);
       if (item && item.active !== false) {
-        results.push(item);
+        items.push(item);
       }
     }
 
-    results.sort((a, b) => parseDateValue(b.unlocked_at) - parseDateValue(a.unlocked_at));
-    return results;
+    items.sort(function (a, b) {
+      return parseDateValue(b.unlocked_at) - parseDateValue(a.unlocked_at);
+    });
+
+    return items;
   }
 
   return Array.from(memoryUnlocks.values())
-    .filter((item) => item && item.active !== false)
-    .sort((a, b) => parseDateValue(b.unlocked_at) - parseDateValue(a.unlocked_at));
+    .filter(function (item) {
+      return item && item.active !== false;
+    })
+    .sort(function (a, b) {
+      return parseDateValue(b.unlocked_at) - parseDateValue(a.unlocked_at);
+    });
 }
 
 async function saveUnlock(record) {
-  const store = await getKV();
+  const kv = await getKV();
 
-  if (store) {
+  if (kv) {
     const kvKey = `jury_unlock:${record.lock_key}`;
-    await store.set(kvKey, record);
+    await kv.set(kvKey, record);
 
-    const existingIndex = (await store.get("jury_unlock_keys")) || [];
-    const nextIndex = Array.from(new Set([...(Array.isArray(existingIndex) ? existingIndex : []), record.lock_key]));
-    await store.set("jury_unlock_keys", nextIndex);
+    const currentIndex = (await kv.get("jury_unlock_keys")) || [];
+    const nextIndex = Array.from(
+      new Set([...(Array.isArray(currentIndex) ? currentIndex : []), record.lock_key])
+    );
+
+    await kv.set("jury_unlock_keys", nextIndex);
     return;
   }
 
@@ -141,20 +159,24 @@ async function saveUnlock(record) {
 }
 
 async function deleteUnlock(lockKey) {
-  const store = await getKV();
+  const kv = await getKV();
 
-  if (store) {
+  if (kv) {
     const kvKey = `jury_unlock:${lockKey}`;
-    const existing = await store.get(kvKey);
+    const existing = await kv.get(kvKey);
 
-    if (!existing) return false;
+    if (!existing) {
+      return false;
+    }
 
-    await store.del(kvKey);
+    await kv.del(kvKey);
 
-    const existingIndex = (await store.get("jury_unlock_keys")) || [];
-    const nextIndex = (Array.isArray(existingIndex) ? existingIndex : []).filter((key) => key !== lockKey);
-    await store.set("jury_unlock_keys", nextIndex);
+    const currentIndex = (await kv.get("jury_unlock_keys")) || [];
+    const nextIndex = (Array.isArray(currentIndex) ? currentIndex : []).filter(function (key) {
+      return key !== lockKey;
+    });
 
+    await kv.set("jury_unlock_keys", nextIndex);
     return true;
   }
 
@@ -169,23 +191,23 @@ async function parseBody(req) {
   if (typeof req.body === "string" && req.body.trim()) {
     try {
       return JSON.parse(req.body);
-    } catch {
+    } catch (error) {
       throw new Error("Invalid JSON body");
     }
   }
 
-  return await readJsonBody(req);
+  return readJsonBody(req);
 }
 
-async function readJsonBody(req) {
-  return await new Promise((resolve, reject) => {
+function readJsonBody(req) {
+  return new Promise(function (resolve, reject) {
     let raw = "";
 
-    req.on("data", (chunk) => {
+    req.on("data", function (chunk) {
       raw += chunk;
     });
 
-    req.on("end", () => {
+    req.on("end", function () {
       if (!raw.trim()) {
         resolve({});
         return;
@@ -198,7 +220,7 @@ async function readJsonBody(req) {
       }
     });
 
-    req.on("error", (error) => {
+    req.on("error", function (error) {
       reject(error);
     });
   });
@@ -207,8 +229,9 @@ async function readJsonBody(req) {
 function makeLockKey(jurorEmail, applicantEmail) {
   const juror = normalize(jurorEmail);
   const applicant = normalize(applicantEmail);
+
   if (!juror || !applicant) return "";
-  return `${juror}::${applicant}`;
+  return juror + "::" + applicant;
 }
 
 function normalize(value) {
