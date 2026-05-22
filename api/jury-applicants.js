@@ -11,7 +11,7 @@ module.exports = async function handler(req, res) {
   const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
   const API_BASE = "https://services.leadconnectorhq.com";
   const APPLICATION_FORM_ID = "y3ZrmkAfeM1cZtuf2d8F";
-  const DEBUG_MODE = true;
+  const DEBUG_MODE = false;
 
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
@@ -158,12 +158,14 @@ module.exports = async function handler(req, res) {
 
       const rawWebsite = safeString(others.website);
 
-      const socialLink = normalizeUrl(
-        pickFirst(others, ["facebook_or_instagram_page_link", "r6gpxefXNTk3iCtE5iA3"], "")
+      const socialRaw = pickFirst(
+        others,
+        ["facebook_or_instagram_page_link", "r6gpxefXNTk3iCtE5iA3"],
+        ""
       );
 
       const website = normalizeUrl(rawWebsite);
-      const gallery = website || socialLink || "#";
+      const gallery = website || "#";
 
       const experience = pickFirst(
         others,
@@ -194,7 +196,7 @@ module.exports = async function handler(req, res) {
         experience_level: experience,
         statement,
         artist_statement_notes: statement,
-        facebook_or_instagram_page_link: socialLink,
+        facebook_or_instagram_page_link: socialRaw,
         gallery
       };
     });
@@ -235,16 +237,19 @@ module.exports = async function handler(req, res) {
         `${firstName} ${lastName}`.trim();
 
       const contactAreasStrong = findCustomFieldValue(contact, [
+        "4r8SZC7O4PhDSZDOinK3",
         "contact.are_there_any_areas_you_feel_particularly_strong",
         "are_there_any_areas_you_feel_particularly_strong"
       ]);
 
       const contactConnections = findCustomFieldValue(contact, [
+        "zhHUElLupK0gGLdRNrK0",
         "contact.do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why",
         "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why"
       ]);
 
       const contactGrowthAreas = findCustomFieldValue(contact, [
+        "Pzma1Hp4oOvwyhuGtVaL",
         "contact.in_what_areas_of_your_art_business_or_artwork_do_you_struggle",
         "in_what_areas_of_your_art_business_or_artwork_do_you_struggle"
       ]);
@@ -252,7 +257,8 @@ module.exports = async function handler(req, res) {
       const contactStatement = findCustomFieldValue(contact, [
         "contact.artist_statement_notes",
         "artist_statement_notes",
-        "JPmbfbljoUVBN6Idok6Q"
+        "JPmbfbljoUVBN6Idok6Q",
+        "drOsXj2ScM7Y9i1j14sk"
       ]);
 
       const contactExperience = findCustomFieldValue(contact, [
@@ -268,26 +274,16 @@ module.exports = async function handler(req, res) {
         "MwjoxLsrbupQoS2lv9WN"
       ]);
 
-      const contactSocial = normalizeUrl(
-        findCustomFieldValue(contact, [
-          "contact.facebook_or_instagram_page_link",
-          "facebook_or_instagram_page_link",
-          "r6gpxefXNTk3iCtE5iA3"
-        ])
-      );
+      const contactSocial = findCustomFieldValue(contact, [
+        "contact.facebook_or_instagram_page_link",
+        "facebook_or_instagram_page_link",
+        "r6gpxefXNTk3iCtE5iA3"
+      ]);
 
       const finalMediums = enriched?.mediums || contactMediums || "Medium not provided";
       const finalExperience = enriched?.experience_level || contactExperience || "Experience not provided";
       const finalStatement = enriched?.artist_statement_notes || contactStatement || "No artist statement provided.";
       const finalSocial = enriched?.facebook_or_instagram_page_link || contactSocial || "";
-
-      const debugFields = getContactFieldArray(contact).map((field) => ({
-        id: safeString(field.id),
-        key: safeString(field.key),
-        fieldKey: safeString(field.fieldKey),
-        name: safeString(field.name),
-        value: flattenCustomFieldValue(field.value || field.fieldValue || "")
-      }));
 
       const result = {
         id: contact.id || email || fullName,
@@ -305,12 +301,20 @@ module.exports = async function handler(req, res) {
         connections_felt: contactConnections || "",
         areas_to_improve: contactGrowthAreas || "",
         facebook_or_instagram_page_link: finalSocial,
-        gallery: enriched?.gallery || finalSocial || "#",
+        gallery: enriched?.gallery || "#",
         image: "https://placehold.co/1200x800/f1eadf/6b5e52?text=Applicant+Preview"
       };
 
       if (DEBUG_MODE) {
-        result.debug_version = "jury-api-debug-2026-05-22-855pm";
+        const debugFields = getContactFieldArray(contact).map((field) => ({
+          id: safeString(field.id),
+          key: safeString(field.key),
+          fieldKey: safeString(field.fieldKey),
+          name: safeString(field.name),
+          value: flattenCustomFieldValue(field.value || field.fieldValue || "")
+        }));
+
+        result.debug_version = "jury-api-debug-2026-05-22-final";
         result.debug_contact_id = safeString(contact.id || contact._id);
         result.debug_contact_name = fullName;
         result.debug_custom_fields = debugFields;
