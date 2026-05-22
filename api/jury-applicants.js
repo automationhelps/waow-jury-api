@@ -99,6 +99,7 @@ export default async function handler(req, res) {
 
     applicationSubmissions.forEach((sub) => {
       const others = sub.others || {};
+      console.log("SUBMISSION OTHERS:", JSON.stringify(others, null, 2));
       const email = safeString(others.email).toLowerCase();
       if (!email) return;
 
