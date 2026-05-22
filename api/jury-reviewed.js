@@ -14,6 +14,12 @@ module.exports = async function handler(req, res) {
   const safeString = (value) => String(value ?? "").trim();
   const normalize = (value) => safeString(value).toLowerCase();
 
+  const buildLockKey = (jurorEmail, jurorName, applicantEmail, applicantName) => {
+    const jurorKey = normalize(jurorEmail) || normalize(jurorName);
+    const applicantKey = normalize(applicantEmail) || normalize(applicantName);
+    return `${jurorKey}::${applicantKey}`;
+  };
+
   try {
     const response = await fetch(
       `https://services.leadconnectorhq.com/forms/submissions?locationId=${LOCATION_ID}&limit=100&page=1`,
@@ -55,37 +61,31 @@ module.exports = async function handler(req, res) {
           } catch (e) {}
         }
 
-        if (!applicantEmail) {
-          applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || others.applicant_email || "";
-        }
+        if (!applicantEmail) applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || others.applicant_email || "";
+        if (!applicantName) applicantName = others.nxpI696jzQq1ScBZNcBd || others.applicant_name || "";
+        if (!jurorName) jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
+        if (!jurorEmail) jurorEmail = others.juror_email || "";
 
-        if (!applicantName) {
-          applicantName = others.nxpI696jzQq1ScBZNcBd || others.applicant_name || "";
-        }
-
-        if (!jurorName) {
-          jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
-        }
-
-        if (!jurorEmail) {
-          jurorEmail = others.juror_email || "";
-        }
-
-        return {
+        const review = {
           applicant_email: safeString(applicantEmail),
           applicant_name: safeString(applicantName),
           juror_name: safeString(jurorName),
           juror_email: safeString(jurorEmail),
           submitted_at: sub.dateAdded || sub.createdAt || "",
-          submission_id: sub.id || sub._id || "",
-          lock_key: `${normalize(jurorEmail || jurorName)}::${normalize(applicantEmail || applicantName)}`
+          submission_id: sub.id || sub._id || ""
         };
+
+        review.lock_key = buildLockKey(
+          review.juror_email,
+          review.juror_name,
+          review.applicant_email,
+          review.applicant_name
+        );
+
+        return review;
       })
       .filter((review) => {
-        return (
-          (review.juror_name || review.juror_email) &&
-          (review.applicant_email || review.applicant_name)
-        );
+        return review.lock_key !== "::";
       });
 
     const uniqueMap = new Map();
@@ -96,9 +96,7 @@ module.exports = async function handler(req, res) {
       }
     });
 
-    const reviews = Array.from(uniqueMap.values());
-
-    return res.status(200).json(reviews);
+    return res.status(200).json(Array.from(uniqueMap.values()));
   } catch (err) {
     console.error("jury-reviewed error:", err);
     return res.status(500).json({
