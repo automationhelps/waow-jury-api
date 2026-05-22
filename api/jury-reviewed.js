@@ -2,10 +2,6 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -17,45 +13,6 @@ module.exports = async function handler(req, res) {
 
   const safeString = (value) => String(value ?? "").trim();
   const normalize = (value) => safeString(value).toLowerCase();
-
-  const looksLikeEmail = (value) => {
-    const v = safeString(value);
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-  };
-
-  const pickFirst = (obj, keys = []) => {
-    for (const key of keys) {
-      const value = safeString(obj?.[key]);
-      if (value) return value;
-    }
-    return "";
-  };
-
-  const findAnyEmailLikeValue = (obj) => {
-    if (!obj || typeof obj !== "object") return "";
-
-    for (const [key, value] of Object.entries(obj)) {
-      const keyName = normalize(key);
-      const stringValue = safeString(value);
-
-      if (!stringValue) continue;
-
-      if (
-        keyName.includes("juror_email") ||
-        keyName.includes("juror email") ||
-        keyName === "email"
-      ) {
-        if (looksLikeEmail(stringValue)) return stringValue;
-      }
-    }
-
-    for (const value of Object.values(obj)) {
-      const stringValue = safeString(value);
-      if (looksLikeEmail(stringValue)) return stringValue;
-    }
-
-    return "";
-  };
 
   try {
     const response = await fetch(
@@ -81,8 +38,7 @@ module.exports = async function handler(req, res) {
       .filter((sub) => sub.formId === REVIEW_FORM_ID)
       .map((sub) => {
         const others = sub.others || {};
-        const eventData = others.eventData || {};
-        const docUrl = eventData.documentURL || "";
+        const docUrl = others?.eventData?.documentURL || "";
 
         let applicantEmail = "";
         let applicantName = "";
@@ -99,22 +55,10 @@ module.exports = async function handler(req, res) {
           } catch (e) {}
         }
 
-        applicantEmail =
-          applicantEmail ||
-          pickFirst(others, ["pfq5RHMP8a30AYA2TZX5", "applicant_email"]);
-
-        applicantName =
-          applicantName ||
-          pickFirst(others, ["nxpI696jzQq1ScBZNcBd", "applicant_name"]);
-
-        jurorName =
-          jurorName ||
-          pickFirst(others, ["S9MNF8KaH0qXcNmk0mca", "juror_name"]);
-
-        jurorEmail =
-          jurorEmail ||
-          pickFirst(others, ["juror_email", "email"]) ||
-          findAnyEmailLikeValue(others);
+        if (!applicantEmail) applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || others.applicant_email || "";
+        if (!applicantName) applicantName = others.nxpI696jzQq1ScBZNcBd || others.applicant_name || "";
+        if (!jurorName) jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
+        if (!jurorEmail) jurorEmail = others.juror_email || "";
 
         return {
           applicant_email: safeString(applicantEmail),
