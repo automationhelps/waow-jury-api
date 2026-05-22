@@ -1,0 +1,58 @@
+const unlocks = new Map();
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  if (req.method === "GET") {
+    // Return all unlock records as an array
+    return res.status(200).json(Array.from(unlocks.values()));
+  }
+
+  if (req.method === "POST") {
+    try {
+      const body = req.body && typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body || {};
+
+      const jurorEmail = normalize(body.juror_email);
+      const applicantEmail = normalize(body.applicant_email);
+      const reason = clean(body.reason) || "Manual unlock";
+
+      if (!jurorEmail || !applicantEmail) {
+        return res.status(400).json({
+          error: "juror_email and applicant_email are required"
+        });
+      }
+
+      const lockKey = `${jurorEmail}::${applicantEmail}`;
+      const record = {
+        lock_key: lockKey,
+        juror_email: jurorEmail,
+        applicant_email: applicantEmail,
+        reason,
+        unlocked_at: new Date().toISOString(),
+        requested_by: clean(body.requested_by) || "admin"
+      };
+
+      unlocks.set(lockKey, record);
+      return res.status(200).json(record);
+    } catch (error) {
+      console.error("jury-unlocks POST error:", error);
+      return res.status(500).json({ error: "Failed to save unlock" });
+    }
+  }
+
+  return res.status(405).json({ error: "Method not allowed" });
+}
+
+function normalize(v) {
+  return String(v || "").trim().toLowerCase();
+}
+
+function clean(v) {
+  return String(v || "").trim();
+}
