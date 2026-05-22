@@ -19,13 +19,13 @@ export default async function handler(req, res) {
     return `https://${clean}`;
   };
 
+  const safeString = (value) => String(value ?? "").trim();
+
   const ghlHeaders = {
     Authorization: `Bearer ${GHL_TOKEN}`,
     Version: "2021-07-28",
     "Content-Type": "application/json"
   };
-
-  const safeString = (value) => String(value ?? "").trim();
 
   const pickFirst = (obj, keys, fallback = "") => {
     for (const key of keys) {
@@ -39,7 +39,6 @@ export default async function handler(req, res) {
         return safeString(value);
       }
     }
-
     return fallback;
   };
 
@@ -158,7 +157,9 @@ export default async function handler(req, res) {
       const areasStrong = pickFirst(
         others,
         [
-          "are_there_any_areas_you_feel_particularly_strong"
+          "are_there_any_areas_you_feel_particularly_strong",
+          "are_there_any_areas_you_feel_particularly_strong_in",
+          "are_there_any_areas_you_feel_particularly_s..."
         ],
         ""
       );
@@ -166,7 +167,9 @@ export default async function handler(req, res) {
       const connections = pickFirst(
         others,
         [
-          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why"
+          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow_and_our_goal_of_promoting_and_supporting_women_artists_if_so_who_why",
+          "do_you_have_any_connections_that_you_feel_would_be_beneficial_to_waow",
+          "do_you_have_any_connections_that_you_fe..."
         ],
         ""
       );
@@ -174,7 +177,9 @@ export default async function handler(req, res) {
       const growthAreas = pickFirst(
         others,
         [
-          "in_what_areas_of_your_art_business_or_artwork_do_you_struggle"
+          "in_what_areas_of_your_art_business_or_artwork_do_you_struggle",
+          "in_what_areas_of_your_art_business_or_artwork",
+          "in_what_areas_of_your_art_business_or_artw..."
         ],
         ""
       );
