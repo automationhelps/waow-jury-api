@@ -55,10 +55,21 @@ module.exports = async function handler(req, res) {
           } catch (e) {}
         }
 
-        if (!applicantEmail) applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || others.applicant_email || "";
-        if (!applicantName) applicantName = others.nxpI696jzQq1ScBZNcBd || others.applicant_name || "";
-        if (!jurorName) jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
-        if (!jurorEmail) jurorEmail = others.juror_email || "";
+        if (!applicantEmail) {
+          applicantEmail = others.pfq5RHMP8a30AYA2TZX5 || others.applicant_email || "";
+        }
+
+        if (!applicantName) {
+          applicantName = others.nxpI696jzQq1ScBZNcBd || others.applicant_name || "";
+        }
+
+        if (!jurorName) {
+          jurorName = others.S9MNF8KaH0qXcNmk0mca || others.juror_name || "";
+        }
+
+        if (!jurorEmail) {
+          jurorEmail = others.juror_email || "";
+        }
 
         return {
           applicant_email: safeString(applicantEmail),
@@ -66,22 +77,22 @@ module.exports = async function handler(req, res) {
           juror_name: safeString(jurorName),
           juror_email: safeString(jurorEmail),
           submitted_at: sub.dateAdded || sub.createdAt || "",
-          submission_id: sub.id || sub._id || ""
+          submission_id: sub.id || sub._id || "",
+          lock_key: `${normalize(jurorEmail || jurorName)}::${normalize(applicantEmail || applicantName)}`
         };
       })
-      .filter((r) => {
-        return (r.juror_name || r.juror_email) && (r.applicant_email || r.applicant_name);
+      .filter((review) => {
+        return (
+          (review.juror_name || review.juror_email) &&
+          (review.applicant_email || review.applicant_name)
+        );
       });
 
     const uniqueMap = new Map();
 
     rawReviews.forEach((review) => {
-      const jurorKey = normalize(review.juror_email || review.juror_name);
-      const applicantKey = normalize(review.applicant_email || review.applicant_name);
-      const uniqueKey = `${jurorKey}::${applicantKey}`;
-
-      if (!uniqueMap.has(uniqueKey)) {
-        uniqueMap.set(uniqueKey, review);
+      if (!uniqueMap.has(review.lock_key)) {
+        uniqueMap.set(review.lock_key, review);
       }
     });
 
