@@ -2,6 +2,10 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -97,31 +101,19 @@ module.exports = async function handler(req, res) {
 
         applicantEmail =
           applicantEmail ||
-          pickFirst(others, [
-            "pfq5RHMP8a30AYA2TZX5",
-            "applicant_email"
-          ]);
+          pickFirst(others, ["pfq5RHMP8a30AYA2TZX5", "applicant_email"]);
 
         applicantName =
           applicantName ||
-          pickFirst(others, [
-            "nxpI696jzQq1ScBZNcBd",
-            "applicant_name"
-          ]);
+          pickFirst(others, ["nxpI696jzQq1ScBZNcBd", "applicant_name"]);
 
         jurorName =
           jurorName ||
-          pickFirst(others, [
-            "S9MNF8KaH0qXcNmk0mca",
-            "juror_name"
-          ]);
+          pickFirst(others, ["S9MNF8KaH0qXcNmk0mca", "juror_name"]);
 
         jurorEmail =
           jurorEmail ||
-          pickFirst(others, [
-            "juror_email",
-            "email"
-          ]) ||
+          pickFirst(others, ["juror_email", "email"]) ||
           findAnyEmailLikeValue(others);
 
         return {
@@ -133,9 +125,7 @@ module.exports = async function handler(req, res) {
           submission_id: sub.id || sub._id || ""
         };
       })
-      .filter((r) => {
-        return (r.juror_name || r.juror_email) && (r.applicant_email || r.applicant_name);
-      });
+      .filter((r) => (r.juror_name || r.juror_email) && (r.applicant_email || r.applicant_name));
 
     const uniqueMap = new Map();
 
@@ -150,9 +140,7 @@ module.exports = async function handler(req, res) {
       }
     });
 
-    const reviews = Array.from(uniqueMap.values());
-
-    return res.status(200).json(reviews);
+    return res.status(200).json(Array.from(uniqueMap.values()));
   } catch (err) {
     console.error("jury-reviewed error:", err);
     return res.status(500).json({
