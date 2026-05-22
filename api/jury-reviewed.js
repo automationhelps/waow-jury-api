@@ -14,9 +14,10 @@ module.exports = async function handler(req, res) {
   const safeString = (value) => String(value ?? "").trim();
   const normalize = (value) => safeString(value).toLowerCase();
 
-  const buildLockKey = (jurorEmail, jurorName, applicantEmail, applicantName) => {
-    const jurorKey = normalize(jurorEmail) || normalize(jurorName);
-    const applicantKey = normalize(applicantEmail) || normalize(applicantName);
+  const buildLockKey = (jurorEmail, applicantEmail) => {
+    const jurorKey = normalize(jurorEmail);
+    const applicantKey = normalize(applicantEmail);
+    if (!jurorKey || !applicantKey) return "";
     return `${jurorKey}::${applicantKey}`;
   };
 
@@ -75,18 +76,11 @@ module.exports = async function handler(req, res) {
           submission_id: sub.id || sub._id || ""
         };
 
-        review.lock_key = buildLockKey(
-          review.juror_email,
-          review.juror_name,
-          review.applicant_email,
-          review.applicant_name
-        );
+        review.lock_key = buildLockKey(review.juror_email, review.applicant_email);
 
         return review;
       })
-      .filter((review) => {
-        return review.lock_key !== "::";
-      });
+      .filter((review) => review.lock_key);
 
     const uniqueMap = new Map();
 
