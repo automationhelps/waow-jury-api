@@ -69,22 +69,25 @@ module.exports = async function handler(req, res) {
           submission_id: sub.id || sub._id || ""
         };
       })
-      .filter((r) => (r.juror_name || r.juror_email) && (r.applicant_email || r.applicant_name));
+      .filter((r) => {
+        return (r.juror_name || r.juror_email) && (r.applicant_email || r.applicant_name);
+      });
 
     const uniqueMap = new Map();
 
     rawReviews.forEach((review) => {
-      const uniqueKey = [
-        normalize(review.juror_email || review.juror_name),
-        normalize(review.applicant_email || review.applicant_name)
-      ].join("::");
+      const jurorKey = normalize(review.juror_email || review.juror_name);
+      const applicantKey = normalize(review.applicant_email || review.applicant_name);
+      const uniqueKey = `${jurorKey}::${applicantKey}`;
 
       if (!uniqueMap.has(uniqueKey)) {
         uniqueMap.set(uniqueKey, review);
       }
     });
 
-    return res.status(200).json(Array.from(uniqueMap.values()));
+    const reviews = Array.from(uniqueMap.values());
+
+    return res.status(200).json(reviews);
   } catch (err) {
     console.error("jury-reviewed error:", err);
     return res.status(500).json({
