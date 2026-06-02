@@ -1,20 +1,26 @@
 // api/studio-stories-feed.js
-// Returns approved Studio Stories submissions from GHL,
-// each with a paste-ready Squarespace code block.
+const { isAuthenticated } = require("../lib/auth");
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 const APPROVED_TAG = "studio-story-approved";
 
 module.exports = async function handler(req, res) {
+  if (!isAuthenticated(req)) {
+    return res.status(401).json({ ok: false, error: "Not authenticated" });
+  }
+
   try {
-    const token = process.env.GHL_PRIVATE_TOKEN || process.env.GHL_API_KEY || process.env.GHL_PIT;
-const locationId = process.env.GHL_LOCATION_ID;
+    const token =
+      process.env.GHL_PRIVATE_TOKEN ||
+      process.env.GHL_API_KEY ||
+      process.env.GHL_PIT;
+    const locationId = process.env.GHL_LOCATION_ID;
 
     if (!token || !locationId) {
       return res.status(500).json({
         ok: false,
-        error: "Missing GHL_PIT or GHL_LOCATION_ID env vars."
+        error: "Missing GHL credentials.",
       });
     }
 
@@ -22,31 +28,23 @@ const locationId = process.env.GHL_LOCATION_ID;
 
     const stories = contacts
       .map(buildStory)
-      .filter((s) => s.studioStory && s.firstName); // require story text + a name
+      .filter((s) => s.studioStory && s.firstName);
 
-    // Sort newest first if dateAdded present
-    stories.sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
+    stories.sort((a, b) =>
+      (b.submittedAt || "").localeCompare(a.submittedAt || "")
+    );
 
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    return res.status(200).json({
-      ok: true,
-      count: stories.length,
-      stories
-    });
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.status(200).json({ ok: true, count: stories.length, stories });
   } catch (err) {
     console.error("studio-stories-feed error:", err);
-    return res.status(500).json({
-      ok: false,
-      error: err.message || "Unknown error"
-    });
+    return res
+      .status(500)
+      .json({ ok: false, error: err.message || "Unknown error" });
   }
 };
 
-// ---------- GHL fetch ----------
-
 async function fetchApprovedContacts({ token, locationId }) {
-  // Use the Search Contacts endpoint, filter by tag server-side.
   const url = `${GHL_BASE}/contacts/search`;
   const all = [];
   let page = 1;
@@ -58,8 +56,8 @@ async function fetchApprovedContacts({ token, locationId }) {
       page,
       pageLimit,
       filters: [
-        { field: "tags", operator: "contains", value: APPROVED_TAG }
-      ]
+        { field: "tags", operator: "contains", value: APPROVED_TAG },
+      ],
     };
 
     const resp = await fetch(url, {
@@ -68,14 +66,16 @@ async function fetchApprovedContacts({ token, locationId }) {
         Authorization: `Bearer ${token}`,
         Version: GHL_VERSION,
         "Content-Type": "application/json",
-        Accept: "application/json"
+        Accept: "application/json",
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
 
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(`GHL search failed (${resp.status}): ${text.slice(0, 300)}`);
+      throw new Error(
+        `GHL search failed (${resp.status}): ${text.slice(0, 300)}`
+      );
     }
 
     const data = await resp.json();
@@ -84,13 +84,11 @@ async function fetchApprovedContacts({ token, locationId }) {
 
     if (batch.length < pageLimit) break;
     page += 1;
-    if (page > 20) break; // hard safety cap (2000 contacts)
+    if (page > 20) break;
   }
 
   return all;
 }
-
-// ---------- Normalization ----------
 
 function buildStory(contact) {
   const cf = customFieldMap(contact);
@@ -99,7 +97,6 @@ function buildStory(contact) {
   const lastName = (contact.lastName || "").trim();
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
   const email = (contact.email || "").trim();
-  const phone = (contact.phone || "").trim();
   const website = normalizeUrl(cf.website || contact.website || "");
 
   const studioStory = (cf.studio_story || "").trim();
@@ -112,12 +109,11 @@ function buildStory(contact) {
     lastName,
     fullName,
     email,
-    phone, // kept in payload, not in public HTML
     website,
     studioStory,
     images,
     firstImage,
-    submittedAt: contact.dateAdded || contact.createdAt || ""
+    submittedAt: contact.dateAdded || contact.createdAt || "",
   };
 
   story.squarespaceHtml = renderSquarespaceBlock(story);
@@ -125,11 +121,8 @@ function buildStory(contact) {
 }
 
 function customFieldMap(contact) {
-  // GHL returns customFields as [{ id, value }] OR sometimes keyed.
-  // We try to read by `key` if available; otherwise fall back to id->value map.
   const out = {};
   const arr = contact.customFields || contact.customField || [];
-
   if (Array.isArray(arr)) {
     for (const f of arr) {
       const key = (f.key || f.fieldKey || "").replace(/^contact\./, "");
@@ -137,7 +130,8 @@ function customFieldMap(contact) {
     }
   } else if (arr && typeof arr === "object") {
     for (const [k, v] of Object.entries(arr)) {
-      out[k.replace(/^contact\./, "")] = v && typeof v === "object" ? v.value : v;
+      out[k.replace(/^contact\./, "")] =
+        v && typeof v === "object" ? v.value : v;
     }
   }
   return out;
@@ -146,40 +140,28 @@ function customFieldMap(contact) {
 function parseImageField(raw) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
-
   const s = String(raw).trim();
   if (!s) return [];
-
-  // Try JSON array first
   if (s.startsWith("[")) {
     try {
       const arr = JSON.parse(s);
       if (Array.isArray(arr)) return arr.map(String).map((x) => x.trim()).filter(Boolean);
     } catch (_) {}
   }
-
-  // Fallback: comma- or newline-separated URLs
-  return s
-    .split(/[\n,]+/)
-    .map((x) => x.trim())
-    .filter((x) => /^https?:\/\//i.test(x));
+  return s.split(/[\n,]+/).map((x) => x.trim()).filter((x) => /^https?:\/\//i.test(x));
 }
 
 function normalizeUrl(u) {
   if (!u) return "";
-  const trimmed = String(u).trim();
-  if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  const t = String(u).trim();
+  if (!t) return "";
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
 }
 
 function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function paragraphs(text) {
@@ -191,14 +173,8 @@ function paragraphs(text) {
 }
 
 function displayHost(url) {
-  try {
-    return new URL(url).host.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
+  try { return new URL(url).host.replace(/^www\./, ""); } catch { return url; }
 }
-
-// ---------- Squarespace Code Block ----------
 
 function renderSquarespaceBlock(s) {
   const safeName = escapeHtml(s.fullName || "Studio Story");
@@ -214,7 +190,6 @@ function renderSquarespaceBlock(s) {
     ? `<img src="${escapeHtml(s.firstImage)}" alt="${safeName} studio image" style="width:100%;height:auto;display:block;border-radius:14px;box-shadow:0 10px 30px rgba(34,25,18,.08);margin:0 0 1.75em;" />`
     : "";
 
-  // Scoped wrapper class avoids leaking styles to the rest of the Squarespace page.
   return `<!-- Studio Story: ${safeName} -->
 <div class="waow-studio-story" style="font-family:'Manrope',Arial,sans-serif;color:#2f261f;line-height:1.7;max-width:760px;margin:0 auto;padding:1.5em 0;">
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet" />
