@@ -1,4 +1,5 @@
 // api/studio-stories-feed.js
+const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
 const { isAuthenticated } = require("../lib/auth");
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
