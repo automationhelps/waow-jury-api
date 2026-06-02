@@ -1,5 +1,4 @@
 // api/studio-stories-feed.js
-const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
 const { isAuthenticated } = require("../lib/auth");
 
 const GHL_BASE = "https://services.leadconnectorhq.com";
@@ -8,7 +7,7 @@ const APPROVED_TAG = "studio-story-approved";
 
 // Custom field IDs (from GHL — Form 10 fields)
 const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
-const FIELD_STUDIO_IMAGES = null; // TODO: fill in once we have the image-field ID
+const FIELD_STUDIO_IMAGES = null; // TODO: fill in once we capture the image-field ID
 
 module.exports = async function handler(req, res) {
   if (!isAuthenticated(req)) {
