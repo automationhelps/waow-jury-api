@@ -8,8 +8,8 @@ const APPROVED_TAG = "studio-story-approved";
 
 module.exports = async function handler(req, res) {
   try {
-    const token = process.env.GHL_PIT;
-    const locationId = process.env.GHL_LOCATION_ID;
+    const token = process.env.GHL_PRIVATE_TOKEN || process.env.GHL_API_KEY || process.env.GHL_PIT;
+const locationId = process.env.GHL_LOCATION_ID;
 
     if (!token || !locationId) {
       return res.status(500).json({
