@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/", "destination": "/login.html" },
     { "source": "/login", "destination": "/login.html" },
-    { "source": "/publisher", "destination": "/api/publisher" }
+    { "source": "/publisher", "destination": "/api/publisher" },
+    { "source": "/api/image/:id", "destination": "/api/image?id=:id" }
   ]
 }
