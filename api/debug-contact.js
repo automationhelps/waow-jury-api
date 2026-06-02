@@ -6,7 +6,20 @@ module.exports = async function handler(req, res) {
   const token = process.env.GHL_PRIVATE_TOKEN || process.env.GHL_API_KEY;
   const locationId = process.env.GHL_LOCATION_ID;
 
-  // Pull a large batch unfiltered so we can scan for the tag locally
+  const body = {
+    locationId,
+    page: 1,
+    pageLimit: 25,
+    filters: [
+      {
+        group: "AND",
+        filters: [
+          { field: "tags", operator: "contains", value: "studio-story-approved" }
+        ]
+      }
+    ]
+  };
+
   const r = await fetch("https://services.leadconnectorhq.com/contacts/search", {
     method: "POST",
     headers: {
@@ -15,39 +28,24 @@ module.exports = async function handler(req, res) {
       "Content-Type": "application/json",
       Accept: "application/json"
     },
-    body: JSON.stringify({
-      locationId,
-      page: 1,
-      pageLimit: 100
-    })
+    body: JSON.stringify(body)
   });
-  const data = await r.json();
+
+  const status = r.status;
+  const data = await r.json().catch(() => ({}));
   const contacts = data.contacts || [];
 
-  // Find contacts with the approved tag
-  const approved = contacts.filter(c =>
-    Array.isArray(c.tags) && c.tags.includes("studio-story-approved")
-  );
-
-  // Show first 3 in detail
-  const detail = approved.slice(0, 3).map(c => ({
-    id: c.id,
-    firstName: c.firstName,
-    lastName: c.lastName,
-    email: c.email,
-    tags: c.tags,
-    customFields: c.customFields
-  }));
-
-  // Collect all unique tags seen
-  const allTags = new Set();
-  contacts.forEach(c => (c.tags || []).forEach(t => allTags.add(t)));
-
   res.status(200).json({
-    totalReturned: contacts.length,
+    requestStatus: status,
     grandTotal: data.total,
-    approvedFound: approved.length,
-    approvedDetail: detail,
-    uniqueTagsInBatch: Array.from(allTags).sort()
+    found: contacts.length,
+    rawError: data.message || data.error || null,
+    contacts: contacts.map(c => ({
+      id: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      tags: c.tags,
+      customFields: c.customFields
+    }))
   });
 };
