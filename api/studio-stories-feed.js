@@ -5,6 +5,10 @@ const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 const APPROVED_TAG = "studio-story-approved";
 
+// Custom field IDs (from GHL — Form 10 fields)
+const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
+const FIELD_STUDIO_IMAGES = null; // TODO: fill in once we have the image-field ID
+
 module.exports = async function handler(req, res) {
   if (!isAuthenticated(req)) {
     return res.status(401).json({ ok: false, error: "Not authenticated" });
@@ -18,14 +22,12 @@ module.exports = async function handler(req, res) {
     const locationId = process.env.GHL_LOCATION_ID;
 
     if (!token || !locationId) {
-      return res.status(500).json({
-        ok: false,
-        error: "Missing GHL credentials.",
-      });
+      return res
+        .status(500)
+        .json({ ok: false, error: "Missing GHL credentials." });
     }
 
     const contacts = await fetchApprovedContacts({ token, locationId });
-
     const stories = contacts
       .map(buildStory)
       .filter((s) => s.studioStory && s.firstName);
@@ -45,7 +47,6 @@ module.exports = async function handler(req, res) {
 };
 
 async function fetchApprovedContacts({ token, locationId }) {
-  const url = `${GHL_BASE}/contacts/search`;
   const all = [];
   let page = 1;
   const pageLimit = 100;
@@ -56,19 +57,24 @@ async function fetchApprovedContacts({ token, locationId }) {
       page,
       pageLimit,
       filters: [
-        { field: "tags", operator: "contains", value: APPROVED_TAG },
-      ],
+        {
+          group: "AND",
+          filters: [
+            { field: "tags", operator: "contains", value: APPROVED_TAG }
+          ]
+        }
+      ]
     };
 
-    const resp = await fetch(url, {
+    const resp = await fetch(`${GHL_BASE}/contacts/search`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         Version: GHL_VERSION,
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "application/json"
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(body)
     });
 
     if (!resp.ok) {
@@ -81,7 +87,6 @@ async function fetchApprovedContacts({ token, locationId }) {
     const data = await resp.json();
     const batch = data.contacts || [];
     all.push(...batch);
-
     if (batch.length < pageLimit) break;
     page += 1;
     if (page > 20) break;
@@ -91,16 +96,18 @@ async function fetchApprovedContacts({ token, locationId }) {
 }
 
 function buildStory(contact) {
-  const cf = customFieldMap(contact);
+  const cf = customFieldsById(contact);
 
   const firstName = (contact.firstName || "").trim();
   const lastName = (contact.lastName || "").trim();
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
   const email = (contact.email || "").trim();
-  const website = normalizeUrl(cf.website || contact.website || "");
+  const website = normalizeUrl(contact.website || "");
 
-  const studioStory = (cf.studio_story || "").trim();
-  const images = parseImageField(cf.studio_stories_image_uploads);
+  const studioStory = (cf[FIELD_STUDIO_STORY] || "").toString().trim();
+  const images = FIELD_STUDIO_IMAGES
+    ? parseImageField(cf[FIELD_STUDIO_IMAGES])
+    : [];
   const firstImage = images[0] || "";
 
   const story = {
@@ -113,25 +120,19 @@ function buildStory(contact) {
     studioStory,
     images,
     firstImage,
-    submittedAt: contact.dateAdded || contact.createdAt || "",
+    submittedAt: contact.dateAdded || contact.createdAt || ""
   };
 
   story.squarespaceHtml = renderSquarespaceBlock(story);
   return story;
 }
 
-function customFieldMap(contact) {
+function customFieldsById(contact) {
   const out = {};
   const arr = contact.customFields || contact.customField || [];
   if (Array.isArray(arr)) {
     for (const f of arr) {
-      const key = (f.key || f.fieldKey || "").replace(/^contact\./, "");
-      if (key) out[key] = f.value;
-    }
-  } else if (arr && typeof arr === "object") {
-    for (const [k, v] of Object.entries(arr)) {
-      out[k.replace(/^contact\./, "")] =
-        v && typeof v === "object" ? v.value : v;
+      if (f && f.id !== undefined) out[f.id] = f.value;
     }
   }
   return out;
@@ -139,16 +140,21 @@ function customFieldMap(contact) {
 
 function parseImageField(raw) {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
+  if (Array.isArray(raw))
+    return raw.map(String).map((s) => s.trim()).filter(Boolean);
   const s = String(raw).trim();
   if (!s) return [];
   if (s.startsWith("[")) {
     try {
       const arr = JSON.parse(s);
-      if (Array.isArray(arr)) return arr.map(String).map((x) => x.trim()).filter(Boolean);
+      if (Array.isArray(arr))
+        return arr.map(String).map((x) => x.trim()).filter(Boolean);
     } catch (_) {}
   }
-  return s.split(/[\n,]+/).map((x) => x.trim()).filter((x) => /^https?:\/\//i.test(x));
+  return s
+    .split(/[\n,]+/)
+    .map((x) => x.trim())
+    .filter((x) => /^https?:\/\//i.test(x));
 }
 
 function normalizeUrl(u) {
