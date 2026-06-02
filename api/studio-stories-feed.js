@@ -1,5 +1,5 @@
 // api/studio-stories-feed.js
-const { requireAuth } = require('../lib/auth');
+const { isAuthenticated } = require('../lib/auth');
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -11,8 +11,7 @@ const PROXY_BASE = 'https://publish.waowconnect.org/api/image';
 
 module.exports = async (req, res) => {
   // Require operator auth
-  const session = requireAuth(req);
-  if (!session) {
+  if (!isAuthenticated(req)) {
     res.statusCode = 401;
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ ok: false, error: 'unauthorized' }));
@@ -109,7 +108,7 @@ module.exports = async (req, res) => {
         website:   contact.website   || '',
         studioStory,
         image: images[0] || null,  // backwards compatibility
-        images                      // NEW: full array
+        images                      // full array of proxied URLs
       });
     }
 
