@@ -5,9 +5,16 @@ const GHL_BASE = "https://services.leadconnectorhq.com";
 const GHL_VERSION = "2021-07-28";
 const APPROVED_TAG = "studio-story-approved";
 
-// Custom field IDs (from GHL — Form 10 fields)
+// Form 10 custom field IDs
 const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
-const FIELD_STUDIO_IMAGES = null; // TODO: fill in once we capture the image-field ID
+const FIELD_STUDIO_IMAGES = "3zsyvPdjpZtnlesnwwhX";
+
+// Public-facing base URL for the image proxy
+function imageProxyBase(req) {
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = req.headers["x-forwarded-proto"] || "https";
+  return `${proto}://${host}/api/image`;
+}
 
 module.exports = async function handler(req, res) {
   if (!isAuthenticated(req)) {
@@ -27,9 +34,20 @@ module.exports = async function handler(req, res) {
         .json({ ok: false, error: "Missing GHL credentials." });
     }
 
-    const contacts = await fetchApprovedContacts({ token, locationId });
-    const stories = contacts
-      .map(buildStory)
+    const proxyBase = imageProxyBase(req);
+
+    // 1. Find approved contacts via search
+    const summaries = await fetchApprovedContacts({ token, locationId });
+
+    // 2. Fetch each one in full to get the image field
+    const fullContacts = await Promise.all(
+      summaries.map((s) => fetchContactById({ token, id: s.id }))
+    );
+
+    // 3. Build stories
+    const stories = fullContacts
+      .filter(Boolean)
+      .map((c) => buildStory(c, proxyBase))
       .filter((s) => s.studioStory && s.firstName);
 
     stories.sort((a, b) =>
@@ -52,29 +70,27 @@ async function fetchApprovedContacts({ token, locationId }) {
   const pageLimit = 100;
 
   while (true) {
-    const body = {
-      locationId,
-      page,
-      pageLimit,
-      filters: [
-        {
-          group: "AND",
-          filters: [
-            { field: "tags", operator: "contains", value: APPROVED_TAG }
-          ]
-        }
-      ]
-    };
-
     const resp = await fetch(`${GHL_BASE}/contacts/search`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         Version: GHL_VERSION,
         "Content-Type": "application/json",
-        Accept: "application/json"
+        Accept: "application/json",
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        locationId,
+        page,
+        pageLimit,
+        filters: [
+          {
+            group: "AND",
+            filters: [
+              { field: "tags", operator: "contains", value: APPROVED_TAG },
+            ],
+          },
+        ],
+      }),
     });
 
     if (!resp.ok) {
@@ -95,7 +111,24 @@ async function fetchApprovedContacts({ token, locationId }) {
   return all;
 }
 
-function buildStory(contact) {
+async function fetchContactById({ token, id }) {
+  try {
+    const resp = await fetch(`${GHL_BASE}/contacts/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: GHL_VERSION,
+        Accept: "application/json",
+      },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.contact || data;
+  } catch {
+    return null;
+  }
+}
+
+function buildStory(contact, proxyBase) {
   const cf = customFieldsById(contact);
 
   const firstName = (contact.firstName || "").trim();
@@ -105,9 +138,7 @@ function buildStory(contact) {
   const website = normalizeUrl(contact.website || "");
 
   const studioStory = (cf[FIELD_STUDIO_STORY] || "").toString().trim();
-  const images = FIELD_STUDIO_IMAGES
-    ? parseImageField(cf[FIELD_STUDIO_IMAGES])
-    : [];
+  const images = extractImageUrls(cf[FIELD_STUDIO_IMAGES], proxyBase);
   const firstImage = images[0] || "";
 
   const story = {
@@ -120,7 +151,7 @@ function buildStory(contact) {
     studioStory,
     images,
     firstImage,
-    submittedAt: contact.dateAdded || contact.createdAt || ""
+    submittedAt: contact.dateAdded || contact.createdAt || "",
   };
 
   story.squarespaceHtml = renderSquarespaceBlock(story);
@@ -138,23 +169,37 @@ function customFieldsById(contact) {
   return out;
 }
 
-function parseImageField(raw) {
+// GHL file-upload fields look like:
+// { "<uuid>": { documentId, url, meta: { mimetype, ... } } }
+// We extract documentIds and rewrite to our public proxy URL.
+function extractImageUrls(raw, proxyBase) {
   if (!raw) return [];
-  if (Array.isArray(raw))
-    return raw.map(String).map((s) => s.trim()).filter(Boolean);
-  const s = String(raw).trim();
-  if (!s) return [];
-  if (s.startsWith("[")) {
-    try {
-      const arr = JSON.parse(s);
-      if (Array.isArray(arr))
-        return arr.map(String).map((x) => x.trim()).filter(Boolean);
-    } catch (_) {}
+
+  const out = [];
+
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    for (const key of Object.keys(raw)) {
+      const file = raw[key];
+      if (!file || typeof file !== "object") continue;
+      const docId = file.documentId;
+      const mime = (file.meta && file.meta.mimetype) || "";
+      if (!docId) continue;
+      // Only include image files
+      if (mime && !mime.startsWith("image/")) continue;
+      out.push(`${proxyBase}/${docId}`);
+    }
+    return out;
   }
-  return s
-    .split(/[\n,]+/)
-    .map((x) => x.trim())
-    .filter((x) => /^https?:\/\//i.test(x));
+
+  // Fallback: if it's a string (older format), pass through
+  if (typeof raw === "string") {
+    return raw
+      .split(/[\n,]+/)
+      .map((x) => x.trim())
+      .filter((x) => /^https?:\/\//i.test(x));
+  }
+
+  return out;
 }
 
 function normalizeUrl(u) {
@@ -166,8 +211,11 @@ function normalizeUrl(u) {
 
 function escapeHtml(s) {
   return String(s ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function paragraphs(text) {
@@ -179,7 +227,11 @@ function paragraphs(text) {
 }
 
 function displayHost(url) {
-  try { return new URL(url).host.replace(/^www\./, ""); } catch { return url; }
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 function renderSquarespaceBlock(s) {
