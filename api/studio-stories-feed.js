@@ -1,7 +1,7 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // your logic here
   res.status(200).json({ ok: true, stories: [] });
-}
+};
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "https://waowconnect.org");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
