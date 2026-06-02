@@ -1,14 +1,13 @@
 const { isAuthenticated } = require("../lib/auth");
 
-const FIELD_STUDIO_STORY = "nmiOEUfGyrr9CbZ9w0Hf";
-
 module.exports = async function handler(req, res) {
   if (!isAuthenticated(req)) return res.status(401).json({ ok: false });
 
   const token = process.env.GHL_PRIVATE_TOKEN || process.env.GHL_API_KEY;
   const locationId = process.env.GHL_LOCATION_ID;
 
-  const r = await fetch("https://services.leadconnectorhq.com/contacts/search", {
+  // Search for the test contact by email
+  const search = await fetch("https://services.leadconnectorhq.com/contacts/search", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -30,26 +29,25 @@ module.exports = async function handler(req, res) {
       ]
     })
   });
+  const searchData = await search.json();
+  const target = (searchData.contacts || []).find(c => c.firstName === "JB" || c.lastName === "Tester");
 
-  const data = await r.json();
-  const contacts = data.contacts || [];
+  if (!target) {
+    return res.status(200).json({ error: "JB Tester not found in approved list" });
+  }
 
-  const diagnosed = contacts.map(c => {
-    const cfArr = c.customFields || [];
-    const map = {};
-    cfArr.forEach(f => { if (f && f.id) map[f.id] = f.value; });
-    return {
-      id: c.id,
-      firstName: c.firstName,
-      lastName: c.lastName,
-      hasFirstName: !!c.firstName,
-      lookingForFieldId: FIELD_STUDIO_STORY,
-      foundStudioStoryValue: map[FIELD_STUDIO_STORY] || null,
-      hasStudioStory: !!map[FIELD_STUDIO_STORY],
-      allCustomFieldIds: cfArr.map(f => f.id),
-      passesFilter: !!(c.firstName && map[FIELD_STUDIO_STORY])
-    };
+  // Now fetch the FULL contact record by ID — this often returns more fields
+  const full = await fetch(`https://services.leadconnectorhq.com/contacts/${target.id}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Version: "2021-07-28",
+      Accept: "application/json"
+    }
   });
+  const fullData = await full.json();
 
-  res.status(200).json({ found: contacts.length, diagnosed });
+  res.status(200).json({
+    fromSearch: target,
+    fromGetById: fullData
+  });
 };
