@@ -47,190 +47,169 @@ const STYLES = [
 ].join('\n');
 
 // Client-side script as an array of plain strings. No escape gymnastics.
-const CLIENT_JS = [
-'let allStories = [];',
-'',
-'function escapeHTML(s) {',
-'  return String(s == null ? "" : s).replace(/[&<>"\\u0027]/g, function(c) {',
-'    var m = {};',
-'    m["&"]  = "&amp;";',
-'    m["<"]  = "&lt;";',
-'    m[">"]  = "&gt;";',
-'    m["\\""] = "&quot;";',
-'    m["\\u0027"] = "&#39;";',
-'    return m[c];',
-'  });',
-'}',
-'',
-'function buildStorySnippet(story) {',
-'  var safe = escapeHTML;',
-'  var fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();',
-'  var website = story.website ? safe(story.website) : "";',
-'  var websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";',
-'',
-'  var paraText = safe(story.studioStory || "");',
-'  var paragraphs = paraText',
-'    .split(/\\n\\s*\\n/)',
-'    .map(function(p) {',
-'      return "<p>" + p.replace(/\\n/g, "<br>") + "</p>";',
-'    })',
-'    .join("");',
-'',
-'  var imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);',
-'  var heroImg = imgs[0] || "";',
-'  var extraImgs = imgs.slice(1);',
-'',
-'  var websiteHTML = website',
-'    ? \'<p class="ss-website"><a href="\' + websiteHref + \'" target="_blank" rel="noopener noreferrer">\' + website + "</a></p>"',
-'    : "";',
-'',
-'  var heroHTML = heroImg',
-'    ? \'<figure class="ss-hero"><img src="\' + heroImg + \'" alt="\' + fullName + \' studio"></figure>\'',
-'    : "";',
-'',
-'  var galleryHTML = extraImgs.length',
-'    ? \'<div class="ss-gallery">\' + extraImgs.map(function(u) {',
-'        return \'<img src="\' + u + \'" alt="\' + fullName + \' studio">\';',
-'      }).join("") + "</div>"',
-'    : "";',
-'',
-'  return [',
-'    \'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">\',',
-'    "<style>",',
-'    ".waow-studio-story,.waow-studio-story *{box-sizing:border-box;}",',
-'    ".waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}",',
-'    ".waow-studio-story h2{font-family:\\"Cormorant Garamond\\",serif;color:#1f6d68;font-size:clamp(30px,6vw,42px);line-height:1.05;margin:0 0 14px;}",',
-'    ".waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}",',
-'    ".waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}",',
-'    ".waow-studio-story .ss-hero{margin:0 0 18px;}",',
-'    ".waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}",',
-'    ".waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}",',
-'    "@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}",',
-'    "</style>",',
-'    \'<div class="waow-studio-story">\',',
-'    "<h2>" + fullName + "</h2>",',
-'    websiteHTML,',
-'    heroHTML,',
-'    \'<div class="ss-body">\' + paragraphs + "</div>",',
-'    galleryHTML,',
-'    "</div>"',
-'  ].join("\\n");',
-'}',
+const CLIENT_JS = `
+let allStories = [];
+
+function escapeHTML(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
+    const m = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    };
+    return m[c];
+  });
+}
+
+function buildStorySnippet(story) {
+  const safe = escapeHTML;
+  const fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();
+  const website = story.website ? safe(story.website) : "";
+  const websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";
+
+  const paraText = safe(story.studioStory || "");
+  const paragraphs = paraText
+    .split(/\\n\\s*\\n/)
+    .map(function(p) {
+      return "<p>" + p.replace(/\\n/g, "<br>") + "</p>";
+    })
+    .join("");
+
+  const imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);
+  const heroImg = imgs[0] || "";
+  const extraImgs = imgs.slice(1);
+
+  const websiteHTML = website
+    ? '<p class="ss-website"><a href="' + websiteHref + '" target="_blank" rel="noopener noreferrer">' + website + "</a></p>"
+    : "";
+
+  const heroHTML = heroImg
+    ? '<figure class="ss-hero"><img src="' + heroImg + '" alt="' + fullName + ' studio"></figure>'
+    : "";
+
+  const galleryHTML = extraImgs.length
+    ? '<div class="ss-gallery">' + extraImgs.map(function(u) {
+        return '<img src="' + u + '" alt="' + fullName + ' studio">';
+      }).join("") + "</div>"
+    : "";
 
   return [
     '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">',
-    '<style>',
-    '.waow-studio-story,.waow-studio-story *{box-sizing:border-box;}',
-    '.waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}',
+    "<style>",
+    ".waow-studio-story,.waow-studio-story *{box-sizing:border-box;}",
+    ".waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}",
     '.waow-studio-story h2{font-family:"Cormorant Garamond",serif;color:#1f6d68;font-size:clamp(30px,6vw,42px);line-height:1.05;margin:0 0 14px;}',
-    '.waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}',
-    '.waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}',
-    '.waow-studio-story .ss-hero{margin:0 0 18px;}',
-    '.waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}',
-    '.waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}',
-    '@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}',
-    '</style>',
+    ".waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}",
+    ".waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}",
+    ".waow-studio-story .ss-hero{margin:0 0 18px;}",
+    ".waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}",
+    ".waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}",
+    "@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}",
+    "</style>",
     '<div class="waow-studio-story">',
-    '<h2>' + fullName + '</h2>',
+    "<h2>" + fullName + "</h2>",
     websiteHTML,
     heroHTML,
-    '<div class="ss-body">' + paragraphs + '</div>',
+    '<div class="ss-body">' + paragraphs + "</div>",
     galleryHTML,
-    '</div>'
-  ].join('\\n');
+    "</div>"
+  ].join("\\n");
 }
-'',
-'function renderList(stories) {',
-'  var list = document.getElementById("list");',
-'  if (!stories.length) {',
-'    list.innerHTML = \'<div class="empty">No approved artists match your search.</div>\';',
-'    return;',
-'  }',
-'',
-'  list.innerHTML = stories.map(function(s, i) {',
-'    var name = escapeHTML(((s.firstName||"") + " " + (s.lastName||"")).trim()) || "(no name)";',
-'    var email = escapeHTML(s.email || "");',
-'    var imgs = Array.isArray(s.images) ? s.images : (s.image ? [s.image] : []);',
-'    var thumbs = imgs.length',
-'      ? \'<div class="thumbs">\' + imgs.map(function(u){ return \'<img src="\' + u + \'" alt="">\'; }).join("") + "</div>"',
-'      : "";',
-'    var snippet = buildStorySnippet(s);',
-'    var imgLabel = imgs.length ? " \\u00b7 " + imgs.length + " image" + (imgs.length>1?"s":"") : "";',
-'',
-'    return [',
-'      \'<div class="card" data-idx="\' + i + \'">\',',
-'        "<h3>" + name + "</h3>",',
-'        \'<div class="meta">\' + email + imgLabel + "</div>",',
-'        thumbs,',
-'        \'<div class="actions">\',',
-'          \'<button class="primary copy-btn" data-idx="\' + i + \'">Copy Code</button>\',',
-'          \'<button class="preview-btn" data-idx="\' + i + \'">Preview how it will look</button>\',',
-'        "</div>",',
-'        \'<details class="preview" data-idx="\' + i + \'">\',',
-'          \'<summary style="display:none"></summary>\',',
-'          \'<div class="preview-frame">\' + snippet + "</div>",',
-'        "</details>",',
-'        \'<textarea class="snippet-source" data-idx="\' + i + \'" style="position:absolute; left:-9999px;">\' + snippet + "</textarea>",',
-'      "</div>"',
-'    ].join("");',
-'  }).join("");',
-'',
-'  document.querySelectorAll(".copy-btn").forEach(function(btn) {',
-'    btn.addEventListener("click", async function() {',
-'      var idx = btn.getAttribute("data-idx");',
-'      var ta = document.querySelector(\'.snippet-source[data-idx="\' + idx + \'"]\');',
-'      try { await navigator.clipboard.writeText(ta.value); }',
-'      catch(e) { ta.style.position = "static"; ta.select(); document.execCommand("copy"); ta.style.position = "absolute"; }',
-'      btn.classList.add("copied");',
-'      btn.textContent = "\\u2713 Copied \\u2014 now paste into Squarespace";',
-'      setTimeout(function() { btn.classList.remove("copied"); btn.textContent = "Copy Code"; }, 3500);',
-'    });',
-'  });',
-'',
-'  document.querySelectorAll(".preview-btn").forEach(function(btn) {',
-'    btn.addEventListener("click", function() {',
-'      var idx = btn.getAttribute("data-idx");',
-'      var det = document.querySelector(\'details.preview[data-idx="\' + idx + \'"]\');',
-'      det.open = !det.open;',
-'      btn.textContent = det.open ? "Hide preview" : "Preview how it will look";',
-'    });',
-'  });',
-'}',
-'',
-'function applyFilter() {',
-'  var q = document.getElementById("search").value.trim().toLowerCase();',
-'  if (!q) return renderList(allStories);',
-'  var filtered = allStories.filter(function(s) {',
-'    var hay = ((s.firstName||"") + " " + (s.lastName||"") + " " + (s.email||"")).toLowerCase();',
-'    return hay.indexOf(q) !== -1;',
-'  });',
-'  renderList(filtered);',
-'}',
-'',
-'async function load() {',
-'  var status = document.getElementById("status");',
-'  status.textContent = "Loading approved artists\\u2026";',
-'  try {',
-'    var r = await fetch("/api/studio-stories-feed", { credentials: "same-origin" });',
-'    if (r.status === 401) { window.location.href = "/login"; return; }',
-'    var data = await r.json();',
-'    if (!data.ok) { status.textContent = "Could not load: " + (data.error || "unknown error"); return; }',
-'    allStories = data.stories || [];',
-'    status.textContent = allStories.length + " approved artist" + (allStories.length===1?"":"s") + " ready to publish.";',
-'    renderList(allStories);',
-'  } catch(e) { status.textContent = "Network error: " + e.message; }',
-'}',
-'',
-'document.getElementById("refresh").addEventListener("click", load);',
-'document.getElementById("search").addEventListener("input", applyFilter);',
-'document.getElementById("logout").addEventListener("click", async function() {',
-'  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });',
-'  window.location.href = "/login";',
-'});',
-'',
-'load();'
-].join('\n');
 
+function renderList(stories) {
+  var list = document.getElementById("list");
+  if (!stories.length) {
+    list.innerHTML = '<div class="empty">No approved artists match your search.</div>';
+    return;
+  }
+
+  list.innerHTML = stories.map(function(s, i) {
+    var name = escapeHTML(((s.firstName||"") + " " + (s.lastName||"")).trim()) || "(no name)";
+    var email = escapeHTML(s.email || "");
+    var imgs = Array.isArray(s.images) ? s.images : (s.image ? [s.image] : []);
+    var thumbs = imgs.length
+      ? '<div class="thumbs">' + imgs.map(function(u){ return '<img src="' + u + '" alt="">'; }).join("") + "</div>"
+      : "";
+    var snippet = buildStorySnippet(s);
+    var imgLabel = imgs.length ? " · " + imgs.length + " image" + (imgs.length>1?"s":"") : "";
+
+    return [
+      '<div class="card" data-idx="' + i + '">',
+        "<h3>" + name + "</h3>",
+        '<div class="meta">' + email + imgLabel + "</div>",
+        thumbs,
+        '<div class="actions">',
+          '<button class="primary copy-btn" data-idx="' + i + '">Copy Code</button>',
+          '<button class="preview-btn" data-idx="' + i + '">Preview how it will look</button>',
+        "</div>",
+        '<details class="preview" data-idx="' + i + '">',
+          '<summary style="display:none"></summary>',
+          '<div class="preview-frame">' + snippet + "</div>",
+        "</details>",
+        '<textarea class="snippet-source" data-idx="' + i + '" style="position:absolute; left:-9999px;">' + snippet + "</textarea>",
+      "</div>"
+    ].join("");
+  }).join("");
+
+  document.querySelectorAll(".copy-btn").forEach(function(btn) {
+    btn.addEventListener("click", async function() {
+      var idx = btn.getAttribute("data-idx");
+      var ta = document.querySelector('.snippet-source[data-idx="' + idx + '"]');
+      try { await navigator.clipboard.writeText(ta.value); }
+      catch(e) { ta.style.position = "static"; ta.select(); document.execCommand("copy"); ta.style.position = "absolute"; }
+      btn.classList.add("copied");
+      btn.textContent = "✓ Copied — now paste into Squarespace";
+      setTimeout(function() { btn.classList.remove("copied"); btn.textContent = "Copy Code"; }, 3500);
+    });
+  });
+
+  document.querySelectorAll(".preview-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var idx = btn.getAttribute("data-idx");
+      var det = document.querySelector('details.preview[data-idx="' + idx + '"]');
+      det.open = !det.open;
+      btn.textContent = det.open ? "Hide preview" : "Preview how it will look";
+    });
+  });
+}
+
+function applyFilter() {
+  var q = document.getElementById("search").value.trim().toLowerCase();
+  if (!q) return renderList(allStories);
+  var filtered = allStories.filter(function(s) {
+    var hay = ((s.firstName||"") + " " + (s.lastName||"") + " " + (s.email||"")).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  });
+  renderList(filtered);
+}
+
+async function load() {
+  var status = document.getElementById("status");
+  status.textContent = "Loading approved artists…";
+  try {
+    var r = await fetch("/api/studio-stories-feed", { credentials: "same-origin" });
+    if (r.status === 401) { window.location.href = "/login"; return; }
+    var data = await r.json();
+    if (!data.ok) { status.textContent = "Could not load: " + (data.error || "unknown error"); return; }
+    allStories = data.stories || [];
+    status.textContent = allStories.length + " approved artist" + (allStories.length===1?"":"s") + " ready to publish.";
+    renderList(allStories);
+  } catch(e) {
+    status.textContent = "Network error: " + e.message;
+  }
+}
+
+document.getElementById("refresh").addEventListener("click", load);
+document.getElementById("search").addEventListener("input", applyFilter);
+document.getElementById("logout").addEventListener("click", async function() {
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  window.location.href = "/login";
+});
+
+load();
+`;
 const PAGE_HTML = [
 '<!doctype html>',
 '<html lang="en">',
