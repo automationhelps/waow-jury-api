@@ -62,48 +62,60 @@ const CLIENT_JS = [
 '  });',
 '}',
 '',
-'function buildStorySnippet(story) {',
-'  var safe = escapeHTML;',
-'  var fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();',
-'  var website  = story.website ? safe(story.website) : "";',
-'  var websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";',
-'',
-'  var paraText = safe(story.studioStory);',
-'  var paragraphs = paraText.split(/\\n\\s*\\n/).map(function(p) {',
-'    return \'<p style="margin:0 0 1em 0;">\' + p.replace(/\\n/g, "<br>") + "</p>";',
-'  }).join("");',
-'',
-'  var imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);',
-'  var heroImg = imgs[0];',
-'  var extraImgs = imgs.slice(1);',
-'',
-'  var heroHTML = heroImg',
-'    ? \'<div style="margin:0 0 1.5em 0;"><img src="\' + heroImg + \'" alt="\' + fullName + \' studio" style="width:100%; height:auto; display:block; border-radius:4px;"></div>\'',
-'    : "";',
-'',
-'  var gridHTML = extraImgs.length',
-'    ? \'<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:1.5em 0 0 0;">\'',
-'      + extraImgs.map(function(u) {',
-'          return \'<img src="\' + u + \'" alt="\' + fullName + \' studio" style="width:100%; height:auto; display:block; border-radius:4px;">\';',
-'        }).join("")',
-'      + "</div>"',
-'    : "";',
-'',
-'  var websiteHTML = website',
-'    ? \'<p style="margin:0 0 1.5em 0;"><a href="\' + websiteHref + \'" style="color:#1f6d68; text-decoration:underline;" target="_blank" rel="noopener">\' + website + "</a></p>"',
-'    : "";',
-'',
-'  return [',
-'    \'<div class="waow-studio-story" style="background:#f7f3ed; color:#2f261f; padding:2em; border-radius:6px; font-family:Manrope,sans-serif; max-width:760px; margin:0 auto;">\',',
-'    \'  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">\',',
-'    \'  <h2 style="font-family:\\u0027Cormorant Garamond\\u0027,serif; color:#1f6d68; font-size:2em; margin:0 0 0.5em 0;">\' + fullName + "</h2>",',
-'    websiteHTML,',
-'    heroHTML,',
-'    \'  <div style="font-size:1.05em; line-height:1.7;">\' + paragraphs + "</div>",',
-'    gridHTML,',
-'    "</div>"',
-'  ].join("\\n");',
-'}',
+function buildStorySnippet(story) {
+  var safe = escapeHTML;
+  var fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();
+  var website = story.website ? safe(story.website) : "";
+  var websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";
+
+  var paraText = safe(story.studioStory || "");
+  var paragraphs = paraText
+    .split(/\n\s*\n/)
+    .map(function(p) {
+      return '<p>' + p.replace(/\n/g, "<br>") + '</p>';
+    })
+    .join("");
+
+  var imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);
+  var heroImg = imgs[0] || "";
+  var extraImgs = imgs.slice(1);
+
+  var websiteHTML = website
+    ? '<p class="ss-website"><a href="' + websiteHref + '" target="_blank" rel="noopener noreferrer">' + website + '</a></p>'
+    : "";
+
+  var heroHTML = heroImg
+    ? '<figure class="ss-hero"><img src="' + heroImg + '" alt="' + fullName + ' studio"></figure>'
+    : "";
+
+  var galleryHTML = extraImgs.length
+    ? '<div class="ss-gallery">' + extraImgs.map(function(u) {
+        return '<img src="' + u + '" alt="' + fullName + ' studio">';
+      }).join("") + '</div>'
+    : "";
+
+  return [
+    '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">',
+    '<style>',
+    '.waow-studio-story,.waow-studio-story *{box-sizing:border-box;}',
+    '.waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}',
+    '.waow-studio-story h2{font-family:"Cormorant Garamond",serif;color:#1f6d68;font-size:clamp(30px,6vw,42px);line-height:1.05;margin:0 0 14px;}',
+    '.waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}',
+    '.waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}',
+    '.waow-studio-story .ss-hero{margin:0 0 18px;}',
+    '.waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}',
+    '.waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}',
+    '@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}',
+    '</style>',
+    '<div class="waow-studio-story">',
+    '<h2>' + fullName + '</h2>',
+    websiteHTML,
+    heroHTML,
+    '<div class="ss-body">' + paragraphs + '</div>',
+    galleryHTML,
+    '</div>'
+  ].join('\\n');
+}
 '',
 'function renderList(stories) {',
 '  var list = document.getElementById("list");',
