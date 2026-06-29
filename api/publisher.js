@@ -1,5 +1,291 @@
 // api/publisher.js
+// Auth-protected Studio Stories publisher with Queue / Archive tabs.
+// Queue = studio-story-approved | Archive = studio-story-published
+
 const { isAuthenticated } = require('../lib/auth');
+
+function getPageHTML() {
+  return [
+    '<!doctype html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<title>WAOW Studio Story Publisher</title>',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<style>',
+    '* { box-sizing: border-box; }',
+    'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#f5f1ea; color:#2f261f; margin:0; padding:0; font-size:18px; line-height:1.6; }',
+    'header { background:#1f6d68; color:#fff; padding:1.5em 2em; }',
+    'header h1 { margin:0; font-size:1.6em; font-weight:600; }',
+    'header p  { margin:0.4em 0 0; opacity:0.9; }',
+    'main { max-width:980px; margin:0 auto; padding:2em 1.5em 4em; }',
+    '.instructions { background:#fff; border-left:6px solid #1f6d68; padding:1.5em 1.75em; margin-bottom:1.5em; border-radius:4px; }',
+    '.instructions h2 { margin:0 0 0.6em; color:#1f6d68; font-size:1.3em; }',
+    '.instructions ol { margin:0.4em 0 0 1.2em; padding:0; }',
+    '.instructions li { margin-bottom:0.5em; }',
+    '.toolbar { display:flex; gap:0.75em; margin-bottom:1.25em; flex-wrap:wrap; align-items:center; }',
+    '.toolbar input[type="text"] { flex:1; min-width:220px; padding:0.75em 1em; font-size:1.05em; border:2px solid #d4cabc; border-radius:4px; background:#fff; }',
+    '.toolbar button { padding:0.75em 1.4em; font-size:1.05em; border:none; background:#1f6d68; color:#fff; border-radius:4px; cursor:pointer; font-weight:500; }',
+    '.toolbar button:hover { background:#195854; }',
+    '.toolbar .logout { background:transparent; color:#1f6d68; border:2px solid #1f6d68; }',
+    '.tabs { display:flex; gap:0; margin-bottom:1.5em; border-bottom:2px solid #d4cabc; }',
+    '.tab-btn { padding:0.65em 1.5em; font-size:1em; font-weight:600; cursor:pointer;',
+    '  border:none; background:transparent; color:#6a5a48;',
+    '  border-bottom:3px solid transparent; margin-bottom:-2px; }',
+    '.tab-btn.active { color:#1f6d68; border-bottom-color:#1f6d68; }',
+    '.tab-btn:hover { color:#1f6d68; }',
+    '.tab-count { display:inline-block; background:#e5dccd; color:#1f6d68;',
+    '  font-size:0.75em; font-weight:700; padding:0.1em 0.55em;',
+    '  border-radius:999px; margin-left:6px; vertical-align:middle; }',
+    '.tab-btn.active .tab-count { background:#1f6d68; color:#fff; }',
+    '.status { font-size:0.95em; color:#6a5a48; margin-bottom:1em; }',
+    '.card { background:#fff; border-radius:6px; padding:1.5em 1.75em; margin-bottom:1.5em; box-shadow:0 1px 3px rgba(0,0,0,0.06); }',
+    '.card.archived { border-left:4px solid #2e8b57; opacity:0.88; }',
+    '.card h3 { margin:0 0 0.3em; font-size:1.4em; color:#1f6d68; }',
+    '.card .meta { color:#6a5a48; font-size:0.95em; margin-bottom:0.8em; }',
+    '.card .thumbs { display:flex; gap:8px; flex-wrap:wrap; margin:0.5em 0 1em; }',
+    '.card .thumbs img { width:80px; height:80px; object-fit:cover; border-radius:4px; border:1px solid #e5dccd; }',
+    '.card .actions { display:flex; gap:0.6em; flex-wrap:wrap; align-items:center; margin-top:0.5em; }',
+    '.card button { padding:0.7em 1.2em; font-size:1em; border:2px solid #1f6d68; background:#fff; color:#1f6d68; border-radius:4px; cursor:pointer; font-weight:500; }',
+    '.card button:hover { background:#f5f1ea; }',
+    '.card button.primary { background:#1f6d68; color:#fff; }',
+    '.card button.primary:hover { background:#195854; }',
+    '.card button.copied  { background:#2e8b57; color:#fff; border-color:#2e8b57; }',
+    '.card button.archive-btn { border-color:#2e8b57; color:#2e8b57; }',
+    '.card button.archive-btn:hover { background:#2e8b57; color:#fff; }',
+    '.card button.unarchive-btn { border-color:#888; color:#888; font-size:0.85em; }',
+    '.card button.unarchive-btn:hover { background:#888; color:#fff; }',
+    '.badge-published { display:inline-block; background:#e8f5ee; color:#1a6b3a; border:1px solid #b8ddc8;',
+    '  font-size:0.78em; font-weight:600; padding:0.2em 0.65em; border-radius:999px; margin-left:8px; vertical-align:middle; }',
+    'details { margin-top:1em; }',
+    'details summary { cursor:pointer; color:#1f6d68; font-weight:500; padding:0.4em 0; }',
+    '.preview-frame { margin-top:0.8em; padding:1em; background:#faf7f1; border-radius:4px; border:1px dashed #d4cabc; }',
+    '.empty { text-align:center; color:#6a5a48; padding:3em 1em; }',
+    '</style>',
+    '</head>',
+    '<body>',
+    '<header>',
+    '  <h1>WAOW Studio Story Publisher</h1>',
+    '  <p>Copy each artist story code and paste it into a Squarespace Code block.</p>',
+    '</header>',
+    '<main>',
+    '  <div class="instructions">',
+    '    <h2>How to publish a studio story</h2>',
+    '    <ol>',
+    '      <li>In the <strong>Queue</strong> tab, find the artist and click <strong>Copy Code</strong>.</li>',
+    '      <li>Paste into a Squarespace Code block on the Studio Stories page and save.</li>',
+    '      <li>Click <strong>Mark as Published</strong> — they move to the Archive tab automatically.</li>',
+    '      <li>Need to re-copy? Find them in the <strong>Archive</strong> tab and copy again, or move back to Queue.</li>',
+    '    </ol>',
+    '  </div>',
+    '  <div class="toolbar">',
+    '    <input id="search" type="text" placeholder="Search by name or email..." autocomplete="off">',
+    '    <button id="refresh">Refresh</button>',
+    '    <button class="logout" id="logout">Log Out</button>',
+    '  </div>',
+    '  <div class="tabs">',
+    '    <button class="tab-btn active" id="tab-queue" onclick="switchTab(\'queue\')">',
+    '      Queue <span class="tab-count" id="count-queue">0</span>',
+    '    </button>',
+    '    <button class="tab-btn" id="tab-archive" onclick="switchTab(\'archive\')">',
+    '      Archive <span class="tab-count" id="count-archive">0</span>',
+    '    </button>',
+    '  </div>',
+    '  <div class="status" id="status">Loading...</div>',
+    '  <div id="list"></div>',
+    '</main>',
+    '<script>',
+    'var queueStories   = [];',
+    'var archiveStories = [];',
+    'var currentTab     = "queue";',
+    '',
+    'function escapeHTML(s) {',
+    '  return String(s == null ? "" : s).replace(/[&<>"\']/g, function(c) {',
+    '    return {"&":"&amp;","<":"&lt;",">":"&gt;",\'"\':\'&quot;\',"\'":"&#39;"}[c];',
+    '  });',
+    '}',
+    '',
+    'function buildStorySnippet(story) {',
+    '  var safe = escapeHTML;',
+    '  var fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();',
+    '  var website = story.website ? safe(story.website) : "";',
+    '  var websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";',
+    '  var paraText = safe(story.studioStory || "");',
+    '  var paragraphs = paraText.split(/\\n\\s*\\n/).map(function(p) {',
+    '    return "<p>" + p.replace(/\\n/g, "<br>") + "</p>";',
+    '  }).join("");',
+    '  var imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);',
+    '  var heroImg   = imgs[0] || "";',
+    '  var extraImgs = imgs.slice(1);',
+    '  var websiteHTML = website ? \'<p class="ss-website"><a href="\' + websiteHref + \'" target="_blank" rel="noopener noreferrer">\' + website + "</a></p>" : "";',
+    '  var heroHTML    = heroImg ? \'<figure class="ss-hero"><img src="\' + heroImg + \'" alt="\' + fullName + \' studio"></figure>\' : "";',
+    '  var galleryHTML = extraImgs.length ? \'<div class="ss-gallery">\' + extraImgs.map(function(u) {',
+    '    return \'<img src="\' + u + \'" alt="\' + fullName + \' studio">\';',
+    '  }).join("") + "</div>" : "";',
+    '  return [',
+    '    \'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">\',',
+    '    "<style>",',
+    '    ".waow-studio-story,.waow-studio-story *{box-sizing:border-box;}",',
+    '    ".waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}",',
+    '    \'.waow-studio-story h2{font-family:"Cormorant Garamond",serif;color:#1f6d68;font-size:clamp(30px,6vw,42px);line-height:1.05;margin:0 0 14px;}\',',
+    '    ".waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}",',
+    '    ".waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}",',
+    '    ".waow-studio-story .ss-hero{margin:0 0 18px;}",',
+    '    ".waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}",',
+    '    ".waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}",',
+    '    "@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}",',
+    '    "</style>",',
+    '    \'<div class="waow-studio-story">\',',
+    '    "<h2>" + fullName + "</h2>",',
+    '    websiteHTML,',
+    '    heroHTML,',
+    '    \'<div class="ss-body">\' + paragraphs + "</div>",',
+    '    galleryHTML,',
+    '    "</div>"',
+    '  ].join("\\n");',
+    '}',
+    '',
+    'function switchTab(tab) {',
+    '  currentTab = tab;',
+    '  document.getElementById("tab-queue").classList.toggle("active", tab === "queue");',
+    '  document.getElementById("tab-archive").classList.toggle("active", tab === "archive");',
+    '  applySearch();',
+    '}',
+    '',
+    'function renderList(stories, tab) {',
+    '  var listEl   = document.getElementById("list");',
+    '  var statusEl = document.getElementById("status");',
+    '  var isArchive = tab === "archive";',
+    '',
+    '  if (!stories.length) {',
+    '    statusEl.textContent = "";',
+    '    listEl.innerHTML = "<div class=\\"empty\\">" +',
+    '      (isArchive',
+    '        ? "<p>No published stories yet.</p><p>After copying code for an artist, click <strong>Mark as Published</strong>.</p>"',
+    '        : "<p>Queue is empty.</p><p>Tag an artist <strong>studio-story-approved</strong> in GHL, then click Refresh.</p>") +',
+    '      "</div>";',
+    '    return;',
+    '  }',
+    '',
+    '  statusEl.textContent = stories.length + " artist" + (stories.length === 1 ? "" : "s") + (isArchive ? " published." : " in queue.");',
+    '',
+    '  listEl.innerHTML = stories.map(function(s, i) {',
+    '    var name  = escapeHTML(((s.firstName||"") + " " + (s.lastName||"")).trim()) || "(no name)";',
+    '    var email = escapeHTML(s.email || "");',
+    '    var imgs  = Array.isArray(s.images) ? s.images : (s.image ? [s.image] : []);',
+    '    var thumbs = imgs.length',
+    '      ? \'<div class="thumbs">\' + imgs.map(function(u){ return \'<img src="\' + u + \'" alt="">\'}).join("") + "</div>"',
+    '      : "";',
+    '    var imgLabel = imgs.length ? " &middot; " + imgs.length + " image" + (imgs.length > 1 ? "s" : "") : "";',
+    '    var publishedBadge = isArchive ? \'<span class="badge-published">Published</span>\' : "";',
+    '    var snippet = buildStorySnippet(s);',
+    '',
+    '    var archiveBtn = isArchive',
+    '      ? "<button class=\\"unarchive-btn\\" onclick=\\"moveStory(\'" + s.contactId + "\'," + i + ",\'unpublish\')\\">Move Back to Queue</button>"',
+    '      : "<button class=\\"archive-btn\\" onclick=\\"moveStory(\'" + s.contactId + "\'," + i + ",\'publish\')\\">Mark as Published</button>";',
+    '',
+    '    return "<div class=\\"card" + (isArchive ? " archived" : "") + "\\" id=\\"card-" + tab + "-" + i + "\\">" +',
+    '      "<h3>" + name + publishedBadge + "</h3>" +',
+    '      \'<div class="meta">\' + email + imgLabel + "</div>" +',
+    '      thumbs +',
+    '      \'<div class="actions">\' +',
+    '        "<button class=\\"primary\\" onclick=\\"copyCode(\'" + tab + "\'," + i + ")\\">Copy Code</button>" +',
+    '        archiveBtn +',
+    '        "<details><summary>Preview</summary><div class=\\"preview-frame\\">" + snippet + "</div></details>" +',
+    '      "</div>" +',
+    '    "</div>";',
+    '  }).join("");',
+    '}',
+    '',
+    'function copyCode(tab, i) {',
+    '  var s = tab === "queue" ? queueStories[i] : archiveStories[i];',
+    '  var snippet = buildStorySnippet(s);',
+    '  navigator.clipboard.writeText(snippet).then(function() {',
+    '    var btn = document.querySelector("#card-" + tab + "-" + i + " button.primary");',
+    '    if (!btn) return;',
+    '    var orig = btn.textContent;',
+    '    btn.textContent = "\u2713 Copied!";',
+    '    btn.classList.replace("primary","copied");',
+    '    setTimeout(function() { btn.textContent = orig; btn.classList.replace("copied","primary"); }, 3000);',
+    '  }).catch(function() { alert("Copy failed — please select and copy manually."); });',
+    '}',
+    '',
+    'async function moveStory(contactId, i, action) {',
+    '  var btnClass = action === "publish" ? "archive-btn" : "unarchive-btn";',
+    '  var btn = document.querySelector("#card-" + currentTab + "-" + i + " button." + btnClass);',
+    '  var origText = btn ? btn.textContent : "";',
+    '  if (btn) { btn.textContent = "\u23f3"; btn.disabled = true; }',
+    '  try {',
+    '    var resp = await fetch("/api/studio-stories-tag", {',
+    '      method: "POST",',
+    '      credentials: "same-origin",',
+    '      headers: { "Content-Type": "application/json" },',
+    '      body: JSON.stringify({ contactId: contactId, action: action })',
+    '    });',
+    '    var data = await resp.json();',
+    '    if (!data.ok) throw new Error(data.error || "Failed");',
+    '    if (action === "publish") {',
+    '      var story = queueStories.splice(i, 1)[0];',
+    '      archiveStories.unshift(story);',
+    '    } else {',
+    '      var story2 = archiveStories.splice(i, 1)[0];',
+    '      queueStories.unshift(story2);',
+    '    }',
+    '    updateCounts();',
+    '    applySearch();',
+    '  } catch(e) {',
+    '    alert("Error: " + e.message);',
+    '    if (btn) { btn.textContent = origText; btn.disabled = false; }',
+    '  }',
+    '}',
+    '',
+    'function updateCounts() {',
+    '  document.getElementById("count-queue").textContent   = queueStories.length;',
+    '  document.getElementById("count-archive").textContent = archiveStories.length;',
+    '}',
+    '',
+    'async function loadStories() {',
+    '  document.getElementById("status").textContent = "Loading...";',
+    '  document.getElementById("list").innerHTML = "";',
+    '  try {',
+    '    var responses = await Promise.all([',
+    '      fetch("/api/studio-stories-feed?tag=studio-story-approved",  { credentials: "same-origin" }),',
+    '      fetch("/api/studio-stories-feed?tag=studio-story-published", { credentials: "same-origin" })',
+    '    ]);',
+    '    if (responses[0].status === 401) { window.location.href = "/login"; return; }',
+    '    var results = await Promise.all(responses.map(function(r){ return r.json(); }));',
+    '    queueStories   = (results[0].ok ? results[0].stories : []) || [];',
+    '    archiveStories = (results[1].ok ? results[1].stories : []) || [];',
+    '    updateCounts();',
+    '    applySearch();',
+    '  } catch(e) {',
+    '    document.getElementById("status").textContent = "Error: " + e.message;',
+    '  }',
+    '}',
+    '',
+    'function applySearch() {',
+    '  var q = (document.getElementById("search").value || "").toLowerCase().trim();',
+    '  var source = currentTab === "queue" ? queueStories : archiveStories;',
+    '  var filtered = q ? source.filter(function(s) {',
+    '    var hay = ((s.firstName||"") + " " + (s.lastName||"") + " " + (s.email||"")).toLowerCase();',
+    '    return hay.indexOf(q) !== -1;',
+    '  }) : source;',
+    '  renderList(filtered, currentTab);',
+    '}',
+    '',
+    'document.getElementById("refresh").addEventListener("click", loadStories);',
+    'document.getElementById("search").addEventListener("input", applySearch);',
+    'document.getElementById("logout").addEventListener("click", async function() {',
+    '  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });',
+    '  window.location.href = "/login";',
+    '});',
+    '',
+    'loadStories();',
+    '<\/script>',
+    '</body>',
+    '</html>'
+  ].join('\n');
+}
 
 module.exports = async (req, res) => {
   if (!isAuthenticated(req)) {
@@ -7,245 +293,8 @@ module.exports = async (req, res) => {
     res.setHeader('Location', '/login');
     return res.end();
   }
-
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
-  return res.end(PAGE_HTML);
+  return res.end(getPageHTML());
 };
-
-const STYLES = [
-'* { box-sizing: border-box; }',
-'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#f5f1ea; color:#2f261f; margin:0; padding:0; font-size:18px; line-height:1.6; }',
-'header { background:#1f6d68; color:#fff; padding:1.5em 2em; }',
-'header h1 { margin:0; font-size:1.6em; font-weight:600; }',
-'header p  { margin:0.4em 0 0 0; opacity:0.9; }',
-'main { max-width:980px; margin:0 auto; padding:2em 1.5em 4em; }',
-'.instructions { background:#fff; border-left:6px solid #1f6d68; padding:1.5em 1.75em; margin-bottom:2em; border-radius:4px; }',
-'.instructions h2 { margin:0 0 0.6em 0; color:#1f6d68; font-size:1.3em; }',
-'.instructions ol { margin:0.4em 0 0 1.2em; padding:0; }',
-'.instructions li { margin-bottom:0.5em; }',
-'.toolbar { display:flex; gap:0.75em; margin-bottom:1.5em; flex-wrap:wrap; }',
-'.toolbar input[type="text"] { flex:1; min-width:220px; padding:0.75em 1em; font-size:1.05em; border:2px solid #d4cabc; border-radius:4px; background:#fff; }',
-'.toolbar button { padding:0.75em 1.4em; font-size:1.05em; border:none; background:#1f6d68; color:#fff; border-radius:4px; cursor:pointer; font-weight:500; }',
-'.toolbar button:hover { background:#195854; }',
-'.toolbar .logout { background:transparent; color:#1f6d68; border:2px solid #1f6d68; }',
-'.status { font-size:0.95em; color:#6a5a48; margin-bottom:1em; }',
-'.card { background:#fff; border-radius:6px; padding:1.5em 1.75em; margin-bottom:1.5em; box-shadow:0 1px 3px rgba(0,0,0,0.06); }',
-'.card h3 { margin:0 0 0.3em 0; font-size:1.4em; color:#1f6d68; }',
-'.card .meta { color:#6a5a48; font-size:0.95em; margin-bottom:0.8em; }',
-'.card .thumbs { display:flex; gap:8px; flex-wrap:wrap; margin:0.5em 0 1em 0; }',
-'.card .thumbs img { width:80px; height:80px; object-fit:cover; border-radius:4px; border:1px solid #e5dccd; }',
-'.card .actions { display:flex; gap:0.6em; flex-wrap:wrap; }',
-'.card button { padding:0.7em 1.2em; font-size:1em; border:2px solid #1f6d68; background:#fff; color:#1f6d68; border-radius:4px; cursor:pointer; font-weight:500; }',
-'.card button.primary { background:#1f6d68; color:#fff; }',
-'.card button.copied  { background:#2e8b57; color:#fff; border-color:#2e8b57; }',
-'details { margin-top:1em; }',
-'details summary { cursor:pointer; color:#1f6d68; font-weight:500; padding:0.4em 0; }',
-'.preview-frame { margin-top:0.8em; padding:1em; background:#faf7f1; border-radius:4px; border:1px dashed #d4cabc; }',
-'.empty { text-align:center; color:#6a5a48; padding:3em 1em; }'
-].join('\n');
-
-// Client-side script as an array of plain strings. No escape gymnastics.
-const CLIENT_JS = `
-let allStories = [];
-
-function escapeHTML(s) {
-  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
-    const m = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    };
-    return m[c];
-  });
-}
-
-function buildStorySnippet(story) {
-  const safe = escapeHTML;
-  const fullName = (safe(story.firstName) + " " + safe(story.lastName)).trim();
-  const website = story.website ? safe(story.website) : "";
-  const websiteHref = website ? (website.indexOf("http") === 0 ? website : "https://" + website) : "";
-
-  const paraText = safe(story.studioStory || "");
-  const paragraphs = paraText
-    .split(/\\n\\s*\\n/)
-    .map(function(p) {
-      return "<p>" + p.replace(/\\n/g, "<br>") + "</p>";
-    })
-    .join("");
-
-  const imgs = Array.isArray(story.images) ? story.images : (story.image ? [story.image] : []);
-  const heroImg = imgs[0] || "";
-  const extraImgs = imgs.slice(1);
-
-  const websiteHTML = website
-    ? '<p class="ss-website"><a href="' + websiteHref + '" target="_blank" rel="noopener noreferrer">' + website + "</a></p>"
-    : "";
-
-  const heroHTML = heroImg
-    ? '<figure class="ss-hero"><img src="' + heroImg + '" alt="' + fullName + ' studio"></figure>'
-    : "";
-
-  const galleryHTML = extraImgs.length
-    ? '<div class="ss-gallery">' + extraImgs.map(function(u) {
-        return '<img src="' + u + '" alt="' + fullName + ' studio">';
-      }).join("") + "</div>"
-    : "";
-
-  return [
-    '<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500&display=swap" rel="stylesheet">',
-    "<style>",
-    ".waow-studio-story,.waow-studio-story *{box-sizing:border-box;}",
-    ".waow-studio-story{background:#f7f3ed;color:#2f261f;font-family:Manrope,Arial,sans-serif;width:100%;max-width:100%;margin:0;padding:clamp(16px,4vw,28px);border-radius:6px;}",
-    '.waow-studio-story h2{font-family:"Cormorant Garamond",serif;color:#1f6d68;font-size:clamp(30px,6vw,42px);line-height:1.05;margin:0 0 14px;}',
-    ".waow-studio-story p{margin:0 0 1rem;padding:0;font-size:16px;line-height:1.75;}",
-    ".waow-studio-story .ss-website a{color:#1f6d68;text-decoration:underline;word-break:break-word;}",
-    ".waow-studio-story .ss-hero{margin:0 0 18px;}",
-    ".waow-studio-story img{display:block;width:100%;max-width:100%;height:auto;border:0;border-radius:4px;}",
-    ".waow-studio-story .ss-gallery{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}",
-    "@media (max-width:640px){.waow-studio-story{padding:16px;border-radius:4px;}.waow-studio-story .ss-gallery{grid-template-columns:1fr;gap:10px;}}",
-    "</style>",
-    '<div class="waow-studio-story">',
-    "<h2>" + fullName + "</h2>",
-    websiteHTML,
-    heroHTML,
-    '<div class="ss-body">' + paragraphs + "</div>",
-    galleryHTML,
-    "</div>"
-  ].join("\\n");
-}
-
-function renderList(stories) {
-  var list = document.getElementById("list");
-  if (!stories.length) {
-    list.innerHTML = '<div class="empty">No approved artists match your search.</div>';
-    return;
-  }
-
-  list.innerHTML = stories.map(function(s, i) {
-    var name = escapeHTML(((s.firstName||"") + " " + (s.lastName||"")).trim()) || "(no name)";
-    var email = escapeHTML(s.email || "");
-    var imgs = Array.isArray(s.images) ? s.images : (s.image ? [s.image] : []);
-    var thumbs = imgs.length
-      ? '<div class="thumbs">' + imgs.map(function(u){ return '<img src="' + u + '" alt="">'; }).join("") + "</div>"
-      : "";
-    var snippet = buildStorySnippet(s);
-    var imgLabel = imgs.length ? " · " + imgs.length + " image" + (imgs.length>1?"s":"") : "";
-
-    return [
-      '<div class="card" data-idx="' + i + '">',
-        "<h3>" + name + "</h3>",
-        '<div class="meta">' + email + imgLabel + "</div>",
-        thumbs,
-        '<div class="actions">',
-          '<button class="primary copy-btn" data-idx="' + i + '">Copy Code</button>',
-          '<button class="preview-btn" data-idx="' + i + '">Preview how it will look</button>',
-        "</div>",
-        '<details class="preview" data-idx="' + i + '">',
-          '<summary style="display:none"></summary>',
-          '<div class="preview-frame">' + snippet + "</div>",
-        "</details>",
-        '<textarea class="snippet-source" data-idx="' + i + '" style="position:absolute; left:-9999px;">' + snippet + "</textarea>",
-      "</div>"
-    ].join("");
-  }).join("");
-
-  document.querySelectorAll(".copy-btn").forEach(function(btn) {
-    btn.addEventListener("click", async function() {
-      var idx = btn.getAttribute("data-idx");
-      var ta = document.querySelector('.snippet-source[data-idx="' + idx + '"]');
-      try { await navigator.clipboard.writeText(ta.value); }
-      catch(e) { ta.style.position = "static"; ta.select(); document.execCommand("copy"); ta.style.position = "absolute"; }
-      btn.classList.add("copied");
-      btn.textContent = "✓ Copied — now paste into Squarespace";
-      setTimeout(function() { btn.classList.remove("copied"); btn.textContent = "Copy Code"; }, 3500);
-    });
-  });
-
-  document.querySelectorAll(".preview-btn").forEach(function(btn) {
-    btn.addEventListener("click", function() {
-      var idx = btn.getAttribute("data-idx");
-      var det = document.querySelector('details.preview[data-idx="' + idx + '"]');
-      det.open = !det.open;
-      btn.textContent = det.open ? "Hide preview" : "Preview how it will look";
-    });
-  });
-}
-
-function applyFilter() {
-  var q = document.getElementById("search").value.trim().toLowerCase();
-  if (!q) return renderList(allStories);
-  var filtered = allStories.filter(function(s) {
-    var hay = ((s.firstName||"") + " " + (s.lastName||"") + " " + (s.email||"")).toLowerCase();
-    return hay.indexOf(q) !== -1;
-  });
-  renderList(filtered);
-}
-
-async function load() {
-  var status = document.getElementById("status");
-  status.textContent = "Loading approved artists…";
-  try {
-    var r = await fetch("/api/studio-stories-feed", { credentials: "same-origin" });
-    if (r.status === 401) { window.location.href = "/login"; return; }
-    var data = await r.json();
-    if (!data.ok) { status.textContent = "Could not load: " + (data.error || "unknown error"); return; }
-    allStories = data.stories || [];
-    status.textContent = allStories.length + " approved artist" + (allStories.length===1?"":"s") + " ready to publish.";
-    renderList(allStories);
-  } catch(e) {
-    status.textContent = "Network error: " + e.message;
-  }
-}
-
-document.getElementById("refresh").addEventListener("click", load);
-document.getElementById("search").addEventListener("input", applyFilter);
-document.getElementById("logout").addEventListener("click", async function() {
-  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
-  window.location.href = "/login";
-});
-
-load();
-`;
-const PAGE_HTML = [
-'<!doctype html>',
-'<html lang="en">',
-'<head>',
-'<meta charset="utf-8">',
-'<title>WAOW Studio Story Publisher</title>',
-'<meta name="viewport" content="width=device-width, initial-scale=1">',
-'<style>',
-STYLES,
-'</style>',
-'</head>',
-'<body>',
-'<header>',
-'  <h1>WAOW Studio Story Publisher</h1>',
-'  <p>Copy each artist\'s story and paste it into Squarespace.</p>',
-'</header>',
-'<main>',
-'  <div class="instructions">',
-'    <h2>How to publish a studio story</h2>',
-'    <ol>',
-'      <li>Find the artist below (use the search box if needed).</li>',
-'      <li>Click the green <strong>Copy Code</strong> button \u2014 it will turn dark green when copied.</li>',
-'      <li>In Squarespace, open the page, add a <strong>Code</strong> block, and paste. Save the page.</li>',
-'    </ol>',
-'  </div>',
-'  <div class="toolbar">',
-'    <input id="search" type="text" placeholder="Search by name or email\u2026" autocomplete="off">',
-'    <button id="refresh">Refresh List</button>',
-'    <button class="logout" id="logout">Log Out</button>',
-'  </div>',
-'  <div class="status" id="status">Loading approved artists\u2026</div>',
-'  <div id="list"></div>',
-'</main>',
-'<script>',
-CLIENT_JS,
-'</script>',
-'</body>',
-'</html>'
-].join('\n');
