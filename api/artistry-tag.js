@@ -81,10 +81,7 @@ module.exports = async (req, res) => {
     )];
 
     // 3) PUT full contact update with new tags
-    // Note: locationId is required by GHL for PUT /contacts/{id}
-    const locationId = process.env.GHL_LOCATION_ID;
     const putBody = { tags: newTags };
-    if (locationId) putBody.locationId = locationId;
 
     const putResp = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
       method: 'PUT',
