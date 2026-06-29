@@ -1,11 +1,6 @@
 // api/artistry-feed.js
-// Pulls approved artistry profiles from GHL using the Artistry application
-// custom field keys. No Supabase dependency — all data comes from GHL directly.
-//
-// Required env vars (same as studio-stories, no new ones needed):
-//   GHL_PRIVATE_TOKEN   — GHL Private Integration Token
-//   GHL_LOCATION_ID     — GHL Location ID
-//   AUTH_SECRET         — shared with lib/auth.js
+// Pulls approved artistry profiles from GHL using real custom field IDs.
+// Field IDs confirmed from live GHL contact data (Vicki Pedersen, June 2026).
 
 const { isAuthenticated } = require('../lib/auth');
 
@@ -13,54 +8,67 @@ const GHL_BASE    = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
 const PROXY_BASE  = 'https://publish.waowconnect.org/api/image';
 
-// GHL custom field keys — these match the merge tag names from the Artistry form
-// e.g. {{contact.work_piece_1}} → fieldKey = "contact.work_piece_1"
-const FIELD_KEYS = {
-  website:         'contact.website_link_for_contact_me',
-  headshot:        'contact.photo_of_you',
-  summary:         'contact.one_sentence_about_my_art',
-  biography:       'contact.bio',
-  statement:       'contact.consumer_contact_information',
-  membershipType:  'contact.membership_type',
-  medium:          'contact.art_medium_discipline',
-  work1Title:      'contact.work_piece_1_title',
-  work1Image:      'contact.work_piece_1',
-  work2Title:      'contact.work_piece_2_title',
-  work2Image:      'contact.work_piece_2',
-  work3Title:      'contact.work_piece_3_title',
-  work3Image:      'contact.work_piece_3',
-  work4Title:      'contact.work_piece_4_title',
-  work4Image:      'contact.work_piece_4',
-  work5Title:      'contact.work_piece_5_title',
-  work5Image:      'contact.work_piece_5',
-  work6Title:      'contact.work_piece_6_title',
-  work6Image:      'contact.work_piece_6',
+// Real GHL custom field IDs (looked up from live contact debug output)
+const FIELD_IDS = {
+  membershipType: '10Nlt5l6NedE6NOSPxkT',
+  medium:         'MwjoxLsrbupQoS2lv9WN',
+  biography:      'drOsXj2ScM7Y9i1j14sk',   // short bio / one sentence
+  statement:      'zkyBbvpSkExnbrl7DMeL',   // full bio + statement
+  headshot:       'pKoOv9IPV3Sl15ovTPFM',
+  contactWebsite: '2snUBhDdrBxJOT6cqswf',   // contact me link (fallback)
+  // Work pieces — title + image pairs
+  work1Title:     'DWwR9QIwmZNVNo1MLkgZ',
+  work1Image:     '94v50B08s4Vg2NekNS08',
+  work2Title:     '18cIyoM2Ptdww2P8k8mq',
+  work2Image:     'lXw2wHKDS2fitljQtMGF',
+  work3Title:     'A4EwYNM2mc2w38o82FjF',
+  work3Image:     'g2WHlBO12w1AvUmBm5Io',
+  work4Title:     'I7cAxabBL600kfZcK9eN',
+  work4Image:     'ycldqQO2yZ9VFv1CzuoZ',
+  work5Title:     'ZImF7Of8TzpLEAcveGWX',
+  work5Image:     'qHYrurNiRjqtmCJHdzfT',
+  work6Title:     'vrIQ385HY9BDFURbkAhb',
+  work6Image:     '0RFNSWjTkz3tZgqwLCWb',
+  work7Title:     'qWEGKO03ZJxoRCKBagTw',
+  work7Image:     'kyY0fuqHSmiLlpGZQuVG',
+  work8Title:     '18xAPdnzomVICRhRUrdH',
+  work8Image:     'ByUlQEXapXsgU2OHNiVa',
 };
 
-// Helper: find a custom field value by its fieldKey
-function getField(customFields, key) {
+// Get a field value by its ID
+function getById(customFields, id) {
   if (!Array.isArray(customFields)) return null;
-  const f = customFields.find(f => f.fieldKey === key);
+  const f = customFields.find(f => f.id === id);
   if (!f) return null;
+  // Arrays (multi-select) — return first value or null
+  if (Array.isArray(f.value)) return f.value.length > 0 ? f.value[0] : null;
   return f.value ?? null;
 }
 
-// Helper: resolve an image value to a proxied URL
-// GHL file-upload fields can return a string URL or an object with documentId
+// Resolve a GHL file-upload field value to a proxied URL
 function resolveImage(val) {
   if (!val) return null;
   if (typeof val === 'string' && val.startsWith('http')) return val;
-  if (typeof val === 'object') {
-    // Multi-file upload: object keyed by index with { documentId, ... }
+  if (typeof val === 'object' && !Array.isArray(val)) {
+    // Object keyed by UUID with { documentId, url, ... }
     const keys = Object.keys(val);
     if (keys.length > 0) {
-      const first = val[keys[0]];
-      if (first && first.documentId) return `${PROXY_BASE}/${first.documentId}`;
+      const entry = val[keys[0]];
+      if (entry && entry.documentId) {
+        return `${PROXY_BASE}/${entry.documentId}`;
+      }
+      if (entry && entry.url) return entry.url;
     }
-    // Single file upload with documentId at top level
-    if (val.documentId) return `${PROXY_BASE}/${val.documentId}`;
   }
   return null;
+}
+
+// Get image URL directly from a custom field by ID
+function getImageById(customFields, id) {
+  if (!Array.isArray(customFields)) return null;
+  const f = customFields.find(f => f.id === id);
+  if (!f || !f.value) return null;
+  return resolveImage(f.value);
 }
 
 module.exports = async (req, res) => {
@@ -81,7 +89,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 1) Search GHL for contacts tagged "artistry-approved"
+    // 1) Search for contacts tagged artistry-approved
     const searchResp = await fetch(`${GHL_BASE}/contacts/search`, {
       method: 'POST',
       headers: {
@@ -112,7 +120,7 @@ module.exports = async (req, res) => {
 
     const artists = [];
 
-    // 2) Fetch each contact's full record to get customFields
+    // 2) Fetch full contact record for each
     for (const c of slim) {
       const detailResp = await fetch(`${GHL_BASE}/contacts/${c.id}`, {
         method: 'GET',
@@ -129,15 +137,24 @@ module.exports = async (req, res) => {
       const contact = detail.contact || detail;
       const cf      = contact.customFields || [];
 
-      // Build the 6 work pieces (skip any with no image)
+      // Build works array — up to 8 pieces, skip any without an image
       const works = [];
-      for (let i = 1; i <= 6; i++) {
-        const titleVal = getField(cf, FIELD_KEYS[`work${i}Title`]);
-        const imageVal = getField(cf, FIELD_KEYS[`work${i}Image`]);
-        const imageUrl = resolveImage(imageVal);
+      const workDefs = [
+        { titleId: FIELD_IDS.work1Title, imageId: FIELD_IDS.work1Image },
+        { titleId: FIELD_IDS.work2Title, imageId: FIELD_IDS.work2Image },
+        { titleId: FIELD_IDS.work3Title, imageId: FIELD_IDS.work3Image },
+        { titleId: FIELD_IDS.work4Title, imageId: FIELD_IDS.work4Image },
+        { titleId: FIELD_IDS.work5Title, imageId: FIELD_IDS.work5Image },
+        { titleId: FIELD_IDS.work6Title, imageId: FIELD_IDS.work6Image },
+        { titleId: FIELD_IDS.work7Title, imageId: FIELD_IDS.work7Image },
+        { titleId: FIELD_IDS.work8Title, imageId: FIELD_IDS.work8Image },
+      ];
+
+      for (const def of workDefs) {
+        const imageUrl = getImageById(cf, def.imageId);
         if (imageUrl) {
           works.push({
-            title: titleVal || '',
+            title: getById(cf, def.titleId) || '',
             image: imageUrl
           });
         }
@@ -148,15 +165,13 @@ module.exports = async (req, res) => {
         firstName:      contact.firstName || '',
         lastName:       contact.lastName  || '',
         email:          contact.email     || '',
-        // Custom fields
-        website:        getField(cf, FIELD_KEYS.website)        || contact.website || '',
-        headshot:       resolveImage(getField(cf, FIELD_KEYS.headshot)),
-        summary:        getField(cf, FIELD_KEYS.summary)        || '',
-        biography:      getField(cf, FIELD_KEYS.biography)      || '',
-        statement:      getField(cf, FIELD_KEYS.statement)      || '',
-        membershipType: getField(cf, FIELD_KEYS.membershipType) || '',
-        medium:         getField(cf, FIELD_KEYS.medium)         || '',
-        works,          // array of { title, image }
+        website:        contact.website   || getById(cf, FIELD_IDS.contactWebsite) || '',
+        headshot:       getImageById(cf, FIELD_IDS.headshot),
+        membershipType: getById(cf, FIELD_IDS.membershipType) || '',
+        medium:         getById(cf, FIELD_IDS.medium)         || '',
+        biography:      getById(cf, FIELD_IDS.biography)      || '',
+        statement:      getById(cf, FIELD_IDS.statement)      || '',
+        works,
       });
     }
 
