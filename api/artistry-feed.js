@@ -7,7 +7,7 @@
 //   GHL_LOCATION_ID     — GHL Location ID
 //   AUTH_SECRET         — shared with lib/auth.js
 
-const { requireAuth } = require('../lib/auth');
+const { isAuthenticated } = require('../lib/auth');
 
 const GHL_BASE    = 'https://services.leadconnectorhq.com';
 const GHL_VERSION = '2021-07-28';
@@ -64,7 +64,7 @@ function resolveImage(val) {
 }
 
 module.exports = async (req, res) => {
-  const session = requireAuth(req);
+  const session = isAuthenticated(req);
   if (!session) {
     res.statusCode = 401;
     res.setHeader('Content-Type', 'application/json');
