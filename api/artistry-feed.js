@@ -71,6 +71,9 @@ function getImageById(customFields, id) {
   return resolveImage(f.value);
 }
 
+// Allowed tags — only these two values are accepted to prevent abuse
+const ALLOWED_TAGS = ['artistry-approved', 'artistry-published'];
+
 module.exports = async (req, res) => {
   const session = isAuthenticated(req);
   if (!session) {
@@ -78,6 +81,11 @@ module.exports = async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     return res.end(JSON.stringify({ ok: false, error: 'unauthorized' }));
   }
+
+  // Read ?tag= from query string; default to artistry-approved
+  const urlObj   = new URL(req.url, 'http://localhost');
+  const tagParam = urlObj.searchParams.get('tag') || 'artistry-approved';
+  const tag      = ALLOWED_TAGS.includes(tagParam) ? tagParam : 'artistry-approved';
 
   const token      = process.env.GHL_PRIVATE_TOKEN;
   const locationId = process.env.GHL_LOCATION_ID;
@@ -89,7 +97,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 1) Search for contacts tagged artistry-approved
+    // 1) Search for contacts with the requested tag
     const searchResp = await fetch(`${GHL_BASE}/contacts/search`, {
       method: 'POST',
       headers: {
@@ -103,7 +111,7 @@ module.exports = async (req, res) => {
         pageLimit: 100,
         filters: [{
           group: 'AND',
-          filters: [{ field: 'tags', operator: 'contains', value: 'artistry-approved' }]
+          filters: [{ field: 'tags', operator: 'contains', value: tag }]
         }]
       })
     });
