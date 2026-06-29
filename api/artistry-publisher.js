@@ -132,7 +132,7 @@ details summary { cursor: pointer; color: #4a2e1a; font-weight: 500; padding: 0.
 
 <header>
   <h1>WAOW Artistry Publisher</h1>
-  <p>Copy each artist's full profile code and paste it into a Squarespace Code block.</p>
+  <p>Copy each artist&#39;s full profile code and paste it into a Squarespace Code block.</p>
 </header>
 
 <main>
