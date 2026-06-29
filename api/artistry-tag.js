@@ -1,8 +1,8 @@
 // api/artistry-tag.js
-// Swaps GHL tags for a contact to move them between queue and archive.
-// POST { contactId, action: "publish" | "unpublish" }
-//   publish   → removes "artistry-approved", adds "artistry-published"
-//   unpublish → removes "artistry-published", adds "artistry-approved"
+// Swaps GHL tags via GET current tags → modify → PUT back to contact.
+// The dedicated POST/DELETE /contacts/{id}/tags endpoints require a
+// different OAuth scope — using PUT /contacts/{id} instead which works
+// with the private integration token.
 
 const { isAuthenticated } = require('../lib/auth');
 
@@ -56,7 +56,7 @@ module.exports = async (req, res) => {
   };
 
   try {
-    // 1) GET current contact to read existing tags
+    // 1) GET current contact tags
     const getResp = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
       method: 'GET',
       headers: authHeaders
@@ -75,57 +75,45 @@ module.exports = async (req, res) => {
     const contact  = getData.contact || getData;
     const existing = Array.isArray(contact.tags) ? contact.tags : [];
 
-    // 2) Build new tag list: remove old, add new, dedupe
+    // 2) Compute new tag list
     const newTags = [...new Set(
       existing.filter(t => t !== removeTag).concat(addTag)
     )];
 
-    // 3) Try POST /contacts/{id}/tags to ADD the new tag
-    const addResp = await fetch(`${GHL_BASE}/contacts/${contactId}/tags`, {
-      method: 'POST',
+    // 3) PUT full contact update with new tags
+    // Note: locationId is required by GHL for PUT /contacts/{id}
+    const locationId = process.env.GHL_LOCATION_ID;
+    const putBody = { tags: newTags };
+    if (locationId) putBody.locationId = locationId;
+
+    const putResp = await fetch(`${GHL_BASE}/contacts/${contactId}`, {
+      method: 'PUT',
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags: [addTag] })
+      body: JSON.stringify(putBody)
     });
 
-    const addText = await addResp.text();
+    const putText = await putResp.text();
 
-    if (!addResp.ok) {
+    if (!putResp.ok) {
       res.statusCode = 502;
       return res.end(JSON.stringify({
-        ok: false, error: 'failed to add tag',
-        ghl_status: addResp.status,
-        detail: addText,
-        tried_tag: addTag,
-        contactId
-      }));
-    }
-
-    // 4) Try DELETE /contacts/{id}/tags to REMOVE the old tag
-    const delResp = await fetch(`${GHL_BASE}/contacts/${contactId}/tags`, {
-      method: 'DELETE',
-      headers: { ...authHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags: [removeTag] })
-    });
-
-    const delText = await delResp.text();
-
-    if (!delResp.ok) {
-      res.statusCode = 502;
-      return res.end(JSON.stringify({
-        ok: false, error: 'failed to remove tag',
-        ghl_status: delResp.status,
-        detail: delText,
-        tried_tag: removeTag,
+        ok: false, error: 'failed to update contact',
+        ghl_status: putResp.status,
+        detail: putText,
         contactId,
-        note: 'add succeeded but remove failed — tag was added'
+        tried_tags: newTags
       }));
     }
+
+    let putData = {};
+    try { putData = JSON.parse(putText); } catch(e) {}
+    const finalTags = (putData.contact || putData).tags || newTags;
 
     res.statusCode = 200;
     return res.end(JSON.stringify({
       ok: true, action, contactId,
       added: addTag, removed: removeTag,
-      newTags
+      tags: finalTags
     }));
 
   } catch (err) {
