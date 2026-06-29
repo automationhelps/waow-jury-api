@@ -6,5 +6,6 @@
     { "source": "/api/image/:id", "destination": "/api/image?id=:id" },
     { "source": "/artistry-publisher", "destination": "/api/artistry-publisher" },
     { "source": "/api/artistry-feed",   "destination": "/api/artistry-feed" }
+    { "source": "/api/artistry-debug", "destination": "/api/artistry-debug" }
   ]
 }
