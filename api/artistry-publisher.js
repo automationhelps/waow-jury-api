@@ -295,28 +295,28 @@ function renderList(artists) {
         ).join('')
       : '';
 
-    return \`<div class="card" id="card-\${i}"
-        data-name="\${esc(fullName).toLowerCase()}"
-        data-medium="\${esc(a.medium || '').toLowerCase()}"
-        data-membership="\${esc(a.membershipType || '').toLowerCase()}">
-      <div class="card-header">
-        \${headshotEl}
-        <div class="name-block">
-          <h3>\${fullName}</h3>
-          <div class="badges">\${badges}</div>
-        </div>
-      </div>
-      \${a.summary ? '<div class="summary-text">"' + esc(a.summary) + '"</div>' : ''}
-      <div class="meta">\${websiteLink} · \${esc(a.email)}</div>
-      \${workThumbs ? '<div class="works-thumbs">' + workThumbs + '</div>' : ''}
-      <div class="actions">
-        <button class="primary" onclick="copyCode(\${i})">Copy Code for Squarespace</button>
-        <details>
-          <summary>Preview</summary>
-          <div class="preview-frame">\${buildSnippet(a)}</div>
-        </details>
-      </div>
-    </div>\`;
+    return '<div class="card" id="card-' + i + '"' +
+        ' data-name="' + esc(fullName).toLowerCase() + '"' +
+        ' data-medium="' + esc(a.medium || '').toLowerCase() + '"' +
+        ' data-membership="' + esc(a.membershipType || '').toLowerCase() + '">' +
+      '<div class="card-header">' +
+        headshotEl +
+        '<div class="name-block">' +
+          '<h3>' + fullName + '</h3>' +
+          '<div class="badges">' + badges + '</div>' +
+        '</div>' +
+      '</div>' +
+      (a.summary ? '<div class="summary-text">"' + esc(a.summary) + '"</div>' : '') +
+      '<div class="meta">' + websiteLink + ' · ' + esc(a.email) + '</div>' +
+      (workThumbs ? '<div class="works-thumbs">' + workThumbs + '</div>' : '') +
+      '<div class="actions">' +
+        '<button class="primary" onclick="copyCode(' + i + ')">Copy Code for Squarespace</button>' +
+        '<details>' +
+          '<summary>Preview</summary>' +
+          '<div class="preview-frame">' + buildSnippet(a) + '</div>' +
+        '</details>' +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
