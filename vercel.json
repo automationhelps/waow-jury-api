@@ -1,9 +1,11 @@
-"rewrites": [
-  { "source": "/", "destination": "/login.html" },
-  { "source": "/login", "destination": "/login.html" },
-  { "source": "/publisher", "destination": "/api/publisher" },
-  { "source": "/api/image/:id", "destination": "/api/image?id=:id" },
-  { "source": "/artistry-publisher", "destination": "/api/artistry-publisher" },
-  { "source": "/api/artistry-feed", "destination": "/api/artistry-feed" },
-  { "source": "/api/artistry-tag", "destination": "/api/artistry-tag" }
-]
+{
+  "rewrites": [
+    { "source": "/", "destination": "/login.html" },
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/publisher", "destination": "/api/publisher" },
+    { "source": "/api/image/:id", "destination": "/api/image?id=:id" },
+    { "source": "/artistry-publisher", "destination": "/api/artistry-publisher" },
+    { "source": "/api/artistry-feed", "destination": "/api/artistry-feed" },
+    { "source": "/api/artistry-tag", "destination": "/api/artistry-tag" }
+  ]
+}
