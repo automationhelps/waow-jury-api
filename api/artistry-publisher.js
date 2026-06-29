@@ -2,10 +2,10 @@
 // Auth-protected publisher page for the WAOW Artistry section.
 // Pulls data from /api/artistry-feed and generates Squarespace code blocks.
 
-const { requireAuth } = require('../lib/auth');
+const { isAuthenticated } = require('../lib/auth');
 
 module.exports = async (req, res) => {
-  const session = requireAuth(req);
+  const session = isAuthenticated(req);
   if (!session) {
     res.statusCode = 302;
     res.setHeader('Location', '/login');
