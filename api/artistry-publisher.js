@@ -173,69 +173,90 @@ function normalizeUrl(u) {
 }
 
 // ── Squarespace code block generator ─────────────────────────────────────────
+// Layout matches Kim Casebeer style:
+// [tall portrait photo left] | [name + pill badges + bio + Visit button right]
+// Full-width artist statement block below
+// Works grid at the bottom
 function buildSnippet(a) {
-  const fullName = (esc(a.firstName) + ' ' + esc(a.lastName)).trim();
-  const website  = esc(a.website || '');
+  const fullName   = (esc(a.firstName) + ' ' + esc(a.lastName)).trim();
+  const website    = esc(a.website || '');
   const websiteHref = normalizeUrl(website);
 
-  // Badges row
-  const mediumBadge = a.medium
-    ? '<span style="display:inline-block;background:#f0e8dc;color:#4a2e1a;font-size:0.82em;font-weight:700;padding:0.2em 0.75em;border-radius:999px;text-transform:uppercase;letter-spacing:0.05em;margin-right:6px;">' + esc(a.medium) + '</span>'
-    : '';
-  const memberBadge = a.membershipType
-    ? '<span style="display:inline-block;background:#e8f0e8;color:#2a5a2a;font-size:0.82em;font-weight:700;padding:0.2em 0.75em;border-radius:999px;text-transform:uppercase;letter-spacing:0.05em;">' + esc(a.membershipType) + '</span>'
-    : '';
-  const badgesHTML = (mediumBadge || memberBadge)
-    ? '<p style="margin:0 0 0.75em 0;">' + mediumBadge + memberBadge + '</p>'
-    : '';
-
-  // Headshot
-  const headshotHTML = a.headshot
-    ? '<img src="' + a.headshot + '" alt="' + fullName + '" style="width:200px;height:200px;border-radius:10px;object-fit:cover;display:block;margin:0 0 1.25em 0;border:3px solid #e5dccd;">'
+  // Pill badges (outline style matching reference)
+  const allBadges = [
+    a.medium         ? esc(a.medium)         : '',
+    a.membershipType ? esc(a.membershipType) : ''
+  ].filter(Boolean).map(b =>
+    '<span style="display:inline-block;border:1px solid #bbb;color:#333;font-size:0.78em;' +
+    'padding:0.2em 0.8em;border-radius:999px;margin:0 4px 4px 0;">' + b + '</span>'
+  ).join('');
+  const badgesHTML = allBadges
+    ? '<div style="margin:0.5em 0 0.85em 0;">' + allBadges + '</div>'
     : '';
 
-  // Website link
-  const websiteHTML = website
-    ? '<p style="margin:0 0 0.5em 0;font-size:0.95em;">🌐 <a href="' + websiteHref + '" style="color:#4a2e1a;text-decoration:underline;" target="_blank" rel="noopener">' + website + '</a></p>'
-    : '';
-
-  // Summary (one sentence)
-  const summaryHTML = a.summary
-    ? '<p style="margin:0 0 1em 0;font-style:italic;color:#5a4a3a;font-size:1.05em;">' + esc(a.summary) + '</p>'
-    : '';
-
-  // Biography paragraphs
+  // Biography — first 3 paragraphs shown in the header card
   const bioParas = esc(a.biography || '')
     .split(/\\n\\s*\\n/)
     .filter(p => p.trim())
-    .map(p => '<p style="margin:0 0 0.9em 0;">' + p.replace(/\\n/g, '<br>') + '</p>')
+    .slice(0, 3)
+    .map(p => '<p style="margin:0 0 0.85em 0;font-size:0.97em;line-height:1.7;color:#333;">' +
+              p.replace(/\\n/g, '<br>') + '</p>')
     .join('');
-  const bioHTML = bioParas
-    ? '<div style="font-size:1em;line-height:1.75;margin-bottom:1em;">' + bioParas + '</div>'
+
+  // Visit Artist Website button (dark pill)
+  const websiteBtn = website
+    ? '<a href="' + websiteHref + '" target="_blank" rel="noopener" ' +
+        'style="display:inline-block;background:#1a1a1a;color:#fff;text-decoration:none;' +
+        'padding:0.6em 1.5em;border-radius:999px;font-size:0.92em;font-weight:600;' +
+        'margin-top:0.75em;letter-spacing:0.02em;">Visit Artist Website</a>'
     : '';
 
-  // Artist statement (if different from bio)
+  // Left column — tall portrait headshot
+  const photoCol = a.headshot
+    ? '<div style="flex:0 0 36%;min-width:160px;max-width:280px;">' +
+        '<img src="' + a.headshot + '" alt="' + fullName + '" ' +
+          'style="width:100%;height:auto;display:block;border-radius:8px;object-fit:cover;">' +
+      '</div>'
+    : '';
+
+  // Right column — name, badges, bio, button
+  const infoCol =
+    '<div style="flex:1;min-width:200px;">' +
+      '<h2 style="font-family:Georgia,serif;font-size:1.9em;font-weight:400;' +
+               'color:#111;margin:0 0 0.3em 0;line-height:1.2;">' + fullName + '</h2>' +
+      badgesHTML +
+      (bioParas ? '<div>' + bioParas + '</div>' : '') +
+      websiteBtn +
+    '</div>';
+
+  // Full artist statement — shown below the two-column header
   const statParas = esc(a.statement || '')
     .split(/\\n\\s*\\n/)
     .filter(p => p.trim())
-    .map(p => '<p style="margin:0 0 0.9em 0;">' + p.replace(/\\n/g, '<br>') + '</p>')
+    .map(p => '<p style="margin:0 0 0.9em 0;font-size:0.97em;line-height:1.75;color:#333;">' +
+              p.replace(/\\n/g, '<br>') + '</p>')
     .join('');
   const statHTML = statParas
-    ? '<div style="background:#faf7f1;border-left:4px solid #4a2e1a;padding:1em 1.25em;margin-bottom:1.5em;border-radius:0 4px 4px 0;">' +
-        '<p style="margin:0 0 0.5em 0;font-size:0.85em;font-weight:700;color:#4a2e1a;text-transform:uppercase;letter-spacing:0.05em;">Artist Statement</p>' +
+    ? '<div style="border-top:1px solid #e0e0e0;margin-top:1.75em;padding-top:1.5em;">' +
+        '<p style="margin:0 0 0.6em 0;font-size:0.78em;font-weight:700;color:#888;' +
+           'text-transform:uppercase;letter-spacing:0.08em;">Artist Statement</p>' +
         statParas +
       '</div>'
     : '';
 
-  // Works grid — each work gets its title below the image
+  // Works grid
   const worksHTML = (Array.isArray(a.works) && a.works.length)
-    ? '<div style="margin-top:1.5em;">' +
-        '<p style="margin:0 0 0.75em 0;font-size:0.85em;font-weight:700;color:#4a2e1a;text-transform:uppercase;letter-spacing:0.05em;">Works</p>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">' +
+    ? '<div style="border-top:1px solid #e0e0e0;margin-top:1.75em;padding-top:1.5em;">' +
+        '<p style="margin:0 0 0.75em 0;font-size:0.78em;font-weight:700;color:#888;' +
+           'text-transform:uppercase;letter-spacing:0.08em;">Works</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">' +
           a.works.map(w =>
             '<div style="text-align:center;">' +
-              '<img src="' + w.image + '" alt="' + esc(w.title || fullName) + '" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;display:block;margin-bottom:0.4em;">' +
-              (w.title ? '<p style="margin:0;font-size:0.88em;color:#5a4a3a;font-weight:500;">' + esc(w.title) + '</p>' : '') +
+              '<img src="' + w.image + '" alt="' + esc(w.title || fullName) + '" ' +
+                'style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;margin-bottom:0.4em;">' +
+              (w.title
+                ? '<p style="margin:0;font-size:0.83em;color:#555;font-weight:500;">' + esc(w.title) + '</p>'
+                : '') +
             '</div>'
           ).join('') +
         '</div>' +
@@ -243,14 +264,13 @@ function buildSnippet(a) {
     : '';
 
   return (
-'<div class="waow-artist" style="background:#f9f5f0;color:#2f261f;padding:2em;border-radius:6px;font-family:\\'Manrope\\',sans-serif;max-width:760px;margin:0 auto;">\\n' +
-'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">\\n' +
-headshotHTML +
-'<h2 style="font-family:\\'Cormorant Garamond\\',serif;color:#4a2e1a;font-size:2em;margin:0 0 0.35em 0;">' + fullName + '</h2>\\n' +
-badgesHTML +
-websiteHTML +
-summaryHTML +
-bioHTML +
+'<div class="waow-artist" style="background:#f5f5f5;color:#111;padding:2em;' +
+'border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,\\'Segoe UI\\',sans-serif;' +
+'max-width:860px;margin:0 auto;">\\n' +
+'<div style="display:flex;gap:2em;flex-wrap:wrap;align-items:flex-start;">\\n' +
+photoCol +
+infoCol +
+'</div>\\n' +
 statHTML +
 worksHTML + '\\n' +
 '</div>'
