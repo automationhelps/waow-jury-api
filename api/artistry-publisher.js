@@ -82,7 +82,7 @@ main { max-width: 980px; margin: 0 auto; padding: 2em 1.5em 4em; }
 }
 .card-header { display: flex; gap: 1.25em; align-items: flex-start; margin-bottom: 0.75em; }
 .card-header img.headshot {
-  width: 72px; height: 72px; border-radius: 50%;
+  width: 160px; height: 160px; border-radius: 10px;
   object-fit: cover; border: 2px solid #e5dccd; flex-shrink: 0;
 }
 .card-header .name-block h3 { margin: 0 0 0.15em; font-size: 1.35em; color: #4a2e1a; }
@@ -191,7 +191,7 @@ function buildSnippet(a) {
 
   // Headshot
   const headshotHTML = a.headshot
-    ? '<img src="' + a.headshot + '" alt="' + fullName + '" style="width:100px;height:100px;border-radius:50%;object-fit:cover;display:block;margin:0 0 1em 0;border:3px solid #e5dccd;">'
+    ? '<img src="' + a.headshot + '" alt="' + fullName + '" style="width:200px;height:200px;border-radius:10px;object-fit:cover;display:block;margin:0 0 1.25em 0;border:3px solid #e5dccd;">'
     : '';
 
   // Website link
